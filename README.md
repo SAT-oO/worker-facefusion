@@ -84,9 +84,8 @@ This fork ships a RunPod serverless worker (`handler.py`) that runs `facefusion.
   "source_image_format": "png",
   "target_url": "https://<bucket>.<account>.r2.cloudflarestorage.com/path/to/target.mp4",
   "output_format": "mp4",
-  "processors": ["face_swapper", "face_enhancer"],
+  "processors": ["face_swapper"],
   "face_swapper_model": "inswapper_128_fp16",
-  "face_enhancer_model": "gfpgan_1.4",
   "extra_args": []
 }
 ```

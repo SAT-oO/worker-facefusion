@@ -122,9 +122,8 @@ def handler(event):
 
         src_fmt = (payload.get("source_image_format") or "png").lower().lstrip(".")
         output_format = _ext_from_format(payload.get("output_format") or "mp4")
-        processors = payload.get("processors") or ["face_swapper", "face_enhancer"]
+        processors = payload.get("processors") or ["face_swapper"]
         face_swapper_model = payload.get("face_swapper_model")
-        face_enhancer_model = payload.get("face_enhancer_model")
         extra_args = payload.get("extra_args") or []
 
         source_path = os.path.join(tmpdir, f"source.{src_fmt}")
@@ -146,8 +145,6 @@ def handler(event):
         ]
         if face_swapper_model:
             cmd += ["--face-swapper-model", face_swapper_model]
-        if face_enhancer_model:
-            cmd += ["--face-enhancer-model", face_enhancer_model]
         if extra_args:
             cmd += [str(a) for a in extra_args]
 
