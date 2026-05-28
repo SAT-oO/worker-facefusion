@@ -1,0 +1,12 @@
+{
+  "input": {
+    "source_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+    "source_image_format": "png",
+    "target_url": "https://example-bucket.r2.cloudflarestorage.com/templates/sample.mp4",
+    "output_format": "mp4",
+    "processors": ["face_swapper", "face_enhancer"],
+    "face_swapper_model": "inswapper_128_fp16",
+    "face_enhancer_model": "gfpgan_1.4",
+    "extra_args": []
+  }
+}
