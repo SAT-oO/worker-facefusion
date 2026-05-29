@@ -48,6 +48,6 @@ PY
 
 COPY . .
 
-RUN python facefusion.py force-download || true
+RUN python facefusion.py force-download 
 
 CMD ["python3", "-u", "handler.py"]
