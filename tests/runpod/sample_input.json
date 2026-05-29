@@ -1,0 +1,11 @@
+{
+  "input": {
+    "source_image_base64": "__SOURCE_B64__",
+    "source_image_format": "jpg",
+    "target_url": "http://minio:9000/ff-test/templates/target-240p.mp4",
+    "output_format": "mp4",
+    "processors": ["face_swapper"],
+    "face_swapper_model": "inswapper_128_fp16",
+    "extra_args": ["--trim-frame-end", "30"]
+  }
+}
