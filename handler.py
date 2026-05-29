@@ -15,6 +15,33 @@ from botocore.client import Config
 import runpod
 
 
+# #region startup self-check (debug)
+def _startup_self_check():
+    try:
+        import cv2, numpy, onnx, onnxruntime, scipy
+        print(f"[startup] python={sys.version.split()[0]}", flush=True)
+        print(f"[startup] versions: cv2={cv2.__version__} numpy={numpy.__version__} "
+              f"onnx={onnx.__version__} onnxruntime={onnxruntime.__version__} "
+              f"scipy={scipy.__version__}", flush=True)
+        print(f"[startup] ort providers: {onnxruntime.get_available_providers()}", flush=True)
+        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".assets", "models")
+        if os.path.isdir(models_dir):
+            files = sorted(os.listdir(models_dir))
+            swapper = [f for f in files if "swap" in f.lower() or "hyperswap" in f.lower()]
+            print(f"[startup] models_dir={models_dir} count={len(files)} swappers={swapper[:6]}", flush=True)
+        else:
+            print(f"[startup] models_dir MISSING: {models_dir}", flush=True)
+        for k in ("R2_ACCOUNT_ID", "R2_BUCKET", "R2_PUBLIC_BASE_URL", "R2_ENDPOINT"):
+            v = os.environ.get(k, "")
+            print(f"[startup] env {k}={'<set>' if v else '<unset>'}", flush=True)
+    except Exception as e:
+        print(f"[startup] self-check error: {e}", flush=True)
+
+
+_startup_self_check()
+# #endregion
+
+
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
