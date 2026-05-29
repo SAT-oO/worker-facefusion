@@ -25,7 +25,7 @@ RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt \
     && pip install -r requirements-runpod.txt \
     && pip uninstall -y onnxruntime onnxruntime-gpu || true \
-    && pip install onnxruntime-gpu==1.24.4
+    && pip install onnxruntime-gpu==1.23.2
 
 COPY . .
 
