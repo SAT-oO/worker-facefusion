@@ -1,7 +1,5 @@
 import os
 import subprocess
-import json
-import time
 from functools import lru_cache
 from typing import List, Optional, Tuple
 from urllib.parse import urlparse
@@ -13,29 +11,6 @@ from facefusion import curl_builder, logger, process_manager, state_manager, tra
 from facefusion.filesystem import get_file_name, get_file_size, is_file, remove_file
 from facefusion.hash_helper import validate_hash
 from facefusion.types import Command, DownloadProvider, DownloadSet
-
-DEBUG_LOG_PATH = '/Users/sat-oo/worker-facefusion/.cursor/debug-f92872.log'
-DEBUG_SESSION_ID = 'f92872'
-
-
-def _debug_log(run_id : str, hypothesis_id : str, location : str, message : str, data : dict) -> None:
-	# #region agent log
-	try:
-		payload =\
-		{
-			'sessionId': DEBUG_SESSION_ID,
-			'runId': run_id,
-			'hypothesisId': hypothesis_id,
-			'location': location,
-			'message': message,
-			'data': data,
-			'timestamp': int(time.time() * 1000)
-		}
-		with open(DEBUG_LOG_PATH, 'a', encoding = 'utf-8') as debug_file:
-			debug_file.write(json.dumps(payload) + '\n')
-	except Exception:
-		pass
-	# #endregion
 
 
 def open_curl(commands : List[Command]) -> subprocess.Popen[bytes]:
@@ -128,10 +103,6 @@ def conditional_download_sources(source_set : DownloadSet) -> bool:
 
 	process_manager.check()
 	_, invalid_source_paths = validate_source_paths(source_paths)
-	# #region agent log
-	if any(source_path.endswith('fan_68_5.onnx') for source_path in source_paths) or any(source_path.endswith('peppa_wutz.onnx') for source_path in source_paths):
-		_debug_log('pre-fix', 'H5', 'facefusion/download.py:134', 'initial source validation', { 'source_paths': source_paths, 'invalid_source_paths': invalid_source_paths })
-	# #endregion
 	if invalid_source_paths:
 		for index in source_set:
 			if source_set.get(index).get('path') in invalid_source_paths:
@@ -141,10 +112,6 @@ def conditional_download_sources(source_set : DownloadSet) -> bool:
 					conditional_download(download_directory_path, [ invalid_source_url ])
 
 	valid_source_paths, invalid_source_paths = validate_source_paths(source_paths)
-	# #region agent log
-	if any(source_path.endswith('fan_68_5.onnx') for source_path in source_paths) or any(source_path.endswith('peppa_wutz.onnx') for source_path in source_paths):
-		_debug_log('pre-fix', 'H5', 'facefusion/download.py:145', 'post-download source validation', { 'valid_source_paths': valid_source_paths, 'invalid_source_paths': invalid_source_paths })
-	# #endregion
 
 	for valid_source_path in valid_source_paths:
 		valid_source_file_name = get_file_name(valid_source_path)

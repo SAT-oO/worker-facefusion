@@ -53,8 +53,19 @@ WORKDIR /app
 
 COPY facefusion/ ./facefusion/
 COPY facefusion.py ./
+COPY tools/preload_face_swap_models.py ./tools/preload_face_swap_models.py
 
-RUN python facefusion.py force-download 
+RUN set -eux; \
+    for attempt in 1 2 3; do \
+      rm -rf /app/.assets/models && mkdir -p /app/.assets/models; \
+      if python tools/preload_face_swap_models.py; then \
+        break; \
+      fi; \
+      if [ "$attempt" -eq 3 ]; then \
+        exit 1; \
+      fi; \
+      echo "targeted preload failed, retrying..." ; \
+    done
 
 FROM base AS final
 WORKDIR /app
