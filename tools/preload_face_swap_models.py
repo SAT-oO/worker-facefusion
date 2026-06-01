@@ -2,9 +2,7 @@ import os
 import sys
 import json
 import time
-
-from facefusion import content_analyser, face_classifier, face_detector, face_landmarker, face_masker, face_recognizer, logger, state_manager, voice_extractor
-from facefusion.processors.modules.face_swapper import core as face_swapper
+from pathlib import Path
 
 DEBUG_LOG_PATH = "/Users/sat-oo/worker-facefusion/.cursor/debug-f92872.log"
 
@@ -34,6 +32,56 @@ def _env(name: str, default: str) -> str:
 
 
 def main() -> int:
+	# #region agent log
+	project_root = str(Path(__file__).resolve().parents[1])
+	if project_root not in sys.path:
+		sys.path.insert(0, project_root)
+	_debug_log(
+		"pre-fix",
+		"H5",
+		"tools/preload_face_swap_models.py:41",
+		"ensured project root on sys.path",
+		{
+			"project_root": project_root,
+			"sys_path_head": sys.path[:5],
+		},
+	)
+	# #endregion
+
+	# #region agent log
+	_debug_log(
+		"pre-fix",
+		"H1",
+		"tools/preload_face_swap_models.py:55",
+		"bootstrap python path state",
+		{
+			"cwd": os.getcwd(),
+			"sys_path_head": sys.path[:5],
+			"has_repo_facefusion": os.path.isdir(os.path.join(os.getcwd(), "facefusion")),
+			"has_app_facefusion": os.path.isdir("/app/facefusion"),
+		},
+	)
+	# #endregion
+	try:
+		from facefusion import content_analyser, face_classifier, face_detector, face_landmarker, face_masker, face_recognizer, logger, state_manager, voice_extractor
+		from facefusion.processors.modules.face_swapper import core as face_swapper
+	except Exception as exc:
+		# #region agent log
+		_debug_log(
+			"pre-fix",
+			"H2",
+			"tools/preload_face_swap_models.py:73",
+			"facefusion import failed",
+			{
+				"error_type": type(exc).__name__,
+				"error": str(exc),
+				"cwd": os.getcwd(),
+				"sys_path_head": sys.path[:5],
+			},
+		)
+		# #endregion
+		raise
+
 	logger.init("info")
 
 	# Pin exact model families to avoid downloading optional variants.
@@ -49,7 +97,7 @@ def main() -> int:
 	_debug_log(
 		"pre-fix",
 		"H1",
-		"tools/preload_face_swap_models.py:45",
+		"tools/preload_face_swap_models.py:92",
 		"initialized preload state",
 		{
 			"face_detector_model": state_manager.get_item("face_detector_model"),
@@ -77,7 +125,7 @@ def main() -> int:
 		_debug_log(
 			"pre-fix",
 			"H2",
-			"tools/preload_face_swap_models.py:71",
+			"tools/preload_face_swap_models.py:118",
 			"running module pre_check",
 			{"module": module.__name__},
 		)
@@ -87,7 +135,7 @@ def main() -> int:
 			_debug_log(
 				"pre-fix",
 				"H3",
-				"tools/preload_face_swap_models.py:79",
+				"tools/preload_face_swap_models.py:126",
 				"module pre_check failed",
 				{"module": module.__name__},
 			)
@@ -99,7 +147,7 @@ def main() -> int:
 	_debug_log(
 		"pre-fix",
 		"H4",
-		"tools/preload_face_swap_models.py:90",
+		"tools/preload_face_swap_models.py:139",
 		"all module pre_check calls succeeded",
 		{},
 	)
