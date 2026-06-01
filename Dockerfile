@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -46,8 +46,20 @@ print("onnxruntime providers:", ort.get_available_providers())
 PY
 # #endregion
 
-COPY . .
+# Stage dedicated to model baking so normal app code changes
+# do not invalidate expensive model downloads.
+FROM base AS models
+WORKDIR /app
+
+COPY facefusion/ ./facefusion/
+COPY facefusion.py ./
 
 RUN python facefusion.py force-download 
+
+FROM base AS final
+WORKDIR /app
+
+COPY . .
+COPY --from=models /app/.assets /app/.assets
 
 CMD ["python3", "-u", "handler.py"]
