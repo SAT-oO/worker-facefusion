@@ -7,11 +7,7 @@
     "processors": [
       "face_swapper"
     ],
-    "face_swapper_model": "inswapper_128_fp16",
-    "extra_args": [
-      "--trim-frame-end",
-      "30"
-    ]
+    "face_swapper_model": "inswapper_128_fp16"
   },
   "policy": {
     "executionTimeout": 600000,
