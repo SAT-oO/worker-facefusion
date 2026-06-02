@@ -67,6 +67,29 @@ RUN set -eux; \
       echo "targeted preload failed, retrying..." ; \
     done
 
+RUN python - <<'PY'
+import os, sys
+models = {
+    'yoloface_8n.onnx':          5_000_000,
+    '2dfan4.onnx':               80_000_000,
+    'arcface_w600k_r50.onnx':    160_000_000,
+    'inswapper_128_fp16.onnx':   250_000_000,
+    'bisenet_resnet_34.onnx':    40_000_000,
+    'xseg_1.onnx':               500_000,
+}
+failed = False
+for name, min_size in models.items():
+    path = f'/app/.assets/models/{name}'
+    size = os.path.getsize(path) if os.path.exists(path) else 0
+    if size < min_size:
+        print(f'FAIL: {name} is {size} bytes (expected >= {min_size})', file=sys.stderr)
+        failed = True
+    else:
+        print(f'  ok  {name} = {size / 1024 / 1024:.1f} MB')
+if failed:
+    sys.exit(1)
+PY
+
 FROM base AS final
 WORKDIR /app
 
