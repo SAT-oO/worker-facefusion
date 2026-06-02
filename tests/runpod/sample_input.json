@@ -7,7 +7,17 @@
     "processors": [
       "face_swapper"
     ],
-    "face_swapper_model": "inswapper_128_fp16"
+    "face_swapper_model": "inswapper_128_fp16",
+    "extra_args": [
+      "--face-swapper-pixel-boost",
+      "512x512",
+      "--output-video-encoder",
+      "libx264",
+      "--output-video-preset",
+      "veryslow",
+      "--output-video-quality",
+      "95"
+    ]
   },
   "policy": {
     "executionTimeout": 600000,
