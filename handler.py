@@ -6,6 +6,7 @@ import sys
 import tempfile
 import traceback
 import uuid
+from time import time
 from urllib.parse import urlparse
 
 import boto3
@@ -137,6 +138,51 @@ def _resolve_bucket(target_url):
     return R2_BUCKET
 
 
+def _debug_log(hypothesis_id, location, message, data, run_id="pre-fix"):
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "e9f867",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time() * 1000),
+        }
+        with open("/Users/sat-oo/worker-facefusion/.cursor/debug-e9f867.log", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload) + "\n")
+    except Exception:
+        pass
+    # #endregion
+
+
+def _diagnose_yolo_model_load():
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".assets", "models", "yoloface_8n.onnx")
+    result = {
+        "model_path": model_path,
+        "model_exists": os.path.isfile(model_path),
+        "model_size": os.path.getsize(model_path) if os.path.isfile(model_path) else -1,
+    }
+    try:
+        import onnxruntime as ort
+
+        providers = ort.get_available_providers()
+        result["ort_version"] = ort.__version__
+        result["ort_available_providers"] = providers
+        try:
+            ort.InferenceSession(model_path, providers=providers)
+            result["session_create_ok"] = True
+        except Exception as exc:
+            result["session_create_ok"] = False
+            result["exception_type"] = type(exc).__name__
+            result["exception_message"] = str(exc)
+            result["traceback_last_line"] = traceback.format_exc().strip().split("\n")[-1]
+    except Exception as exc:
+        result["diagnostic_error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
 def handler(event):
     tmpdir = tempfile.mkdtemp(prefix="ff_")
     try:
@@ -179,10 +225,29 @@ def handler(event):
 
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0 or not os.path.exists(output_path):
+            yolo_diagnostics = None
+            if "loading model yoloface_8n failed" in (proc.stderr or ""):
+                _debug_log(
+                    "H1",
+                    "handler.py:headless-run-failure",
+                    "detected yoloface model load failure in facefusion stderr",
+                    {
+                        "returncode": proc.returncode,
+                        "stderr_tail": _tail(proc.stderr, 1200),
+                    },
+                )
+                yolo_diagnostics = _diagnose_yolo_model_load()
+                _debug_log(
+                    "H2",
+                    "handler.py:yolo-diagnostics",
+                    "captured local yoloface load diagnostics",
+                    yolo_diagnostics,
+                )
             return {
                 "error": f"headless-run failed (exit {proc.returncode})",
                 "stderr": _tail(proc.stderr),
                 "stdout": _tail(proc.stdout),
+                "diagnostics": {"yolo_model_load": yolo_diagnostics} if yolo_diagnostics else {},
             }
 
         bucket = _resolve_bucket(target_url)
