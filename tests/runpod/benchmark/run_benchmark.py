@@ -197,14 +197,52 @@ def run_single_job(
     }
 
 
-def resolve_target_url(config: dict[str, Any], target_key: str) -> str:
+def _sample_input_target_url() -> str | None:
+    sample_path = DIR.parent / "sample_input.json"
+    if not sample_path.exists():
+        return None
+    with sample_path.open(encoding="utf-8") as fh:
+        data = json.load(fh)
+    url = (data.get("input") or {}).get("target_url")
+    return url if url and not url.startswith("${") else None
+
+
+def resolve_target_url(
+    config: dict[str, Any],
+    target_key: str,
+    *,
+    override_url: str | None = None,
+) -> str:
+    if override_url:
+        return override_url
+
     targets = config.get("targets", {})
     url = targets.get(target_key)
     if not url:
         raise KeyError(f"target key '{target_key}' not found in config targets")
-    if url.startswith("${") and url.endswith("}"):
-        raise ValueError(f"target '{target_key}' is unset: {url}")
-    return url
+    if not (url.startswith("${") and url.endswith("}")):
+        return url
+
+    default_url = config.get("fixtures", {}).get("default_target_url")
+    if default_url and not (default_url.startswith("${") and default_url.endswith("}")):
+        print(
+            f"[warn] target '{target_key}' unset ({url}); using fixtures.default_target_url",
+            file=sys.stderr,
+        )
+        return default_url
+
+    sample_url = _sample_input_target_url()
+    if sample_url:
+        print(
+            f"[warn] target '{target_key}' unset ({url}); using tests/runpod/sample_input.json target_url",
+            file=sys.stderr,
+        )
+        return sample_url
+
+    raise ValueError(
+        f"target '{target_key}' is unset ({url}). Set the env var, add a URL in config.json targets, "
+        f"pass --target-url, or set target_url in tests/runpod/sample_input.json"
+    )
 
 
 def resolve_profile(config: dict[str, Any], profile_name: str) -> dict[str, Any]:
@@ -220,6 +258,7 @@ def main() -> int:
     parser.add_argument("--scenario", required=True, choices=["cold_flashboot", "warm", "concurrent"])
     parser.add_argument("--profile", required=True, help="Profile name from config.profiles")
     parser.add_argument("--target", default=None, help="Target key from config.targets (default: fixtures.default_target_key)")
+    parser.add_argument("--target-url", default=None, help="Override target video URL (skips config.targets)")
     parser.add_argument("--iterations", type=int, default=None, help="Override scenario iterations")
     parser.add_argument("--concurrency", type=int, default=None, help="Override scenario concurrency")
     parser.add_argument("--wait-after-job", type=int, default=None, help="Override idle wait seconds between jobs")
@@ -246,7 +285,7 @@ def main() -> int:
     scenario_cfg = config["scenarios"][args.scenario]
     profile = resolve_profile(config, args.profile)
     target_key = args.target or config["fixtures"].get("default_target_key", "120s")
-    target_url = resolve_target_url(config, target_key)
+    target_url = resolve_target_url(config, target_key, override_url=args.target_url)
 
     source_b64_path = (config_path.parent / config["fixtures"]["source_b64_path"]).resolve()
     if not source_b64_path.exists():

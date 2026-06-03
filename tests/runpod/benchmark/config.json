@@ -7,7 +7,7 @@
   },
   "targets": {
     "60s": "${BENCHMARK_TARGET_60S_URL}",
-    "120s": "${BENCHMARK_TARGET_120S_URL}",
+    "120s": "https://pub-338a83c2f58b4e92980219df2ddf0075.r2.dev/test_input/target_video_4_2min.mp4",
     "300s": "${BENCHMARK_TARGET_300S_URL}"
   },
   "runpod": {
