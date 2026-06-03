@@ -59,3 +59,20 @@ Documentation
 -------------
 
 Read the [documentation](https://docs.facefusion.io) for a deep dive.
+
+
+RunPod Serverless
+-----------------
+
+This fork ships a RunPod serverless worker (`handler.py`) that runs `facefusion.py headless-run` for face swap jobs and uploads the result to Cloudflare R2.
+
+**For full setup and integration specs** — RunPod endpoint configuration, environment variables, request/response contracts, R2 URL rules, calling the API from your application, FlashBoot, performance profiles, and local testing — see **[RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)**.
+
+Quick start:
+
+```bash
+docker build -t <registry>/worker-facefusion:latest .
+docker push <registry>/worker-facefusion:latest
+```
+
+Create a RunPod serverless endpoint from that image, set the `R2_*` variables documented in `RUNPOD_SERVERLESS.md`, and submit jobs via `POST https://api.runpod.ai/v2/{endpoint_id}/run`. For local testing: `python handler.py` with [`test_input.json`](test_input.json) in the repo root, or `bash tests/runpod/run_e2e.sh` for a full GPU stack.
