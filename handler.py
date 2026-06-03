@@ -141,19 +141,40 @@ def _resolve_bucket(target_url):
 def _debug_log(hypothesis_id, location, message, data, run_id="pre-fix"):
     # #region agent log
     try:
-        payload = {
-            "sessionId": "e9f867",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time() * 1000),
-        }
-        with open("/Users/sat-oo/worker-facefusion/.cursor/debug-e9f867.log", "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(payload) + "\n")
+        from facefusion.agent_debug_log import agent_debug_log
+        agent_debug_log(hypothesis_id, location, message, data, run_id=run_id)
     except Exception:
         pass
+    # #endregion
+
+
+def _snapshot_gpu_memory():
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.used,memory.free,memory.total",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _read_subprocess_agent_debug():
+    # #region agent log
+    try:
+        from facefusion.agent_debug_log import read_container_debug_lines
+        lines = read_container_debug_lines()
+        return [json.loads(line) for line in lines]
+    except Exception:
+        return []
     # #endregion
 
 
@@ -163,28 +184,50 @@ def _diagnose_yolo_model_load():
         "model_path": model_path,
         "model_exists": os.path.isfile(model_path),
         "model_size": os.path.getsize(model_path) if os.path.isfile(model_path) else -1,
+        "gpu_mem_after_subprocess": _snapshot_gpu_memory(),
     }
     try:
         import onnxruntime as ort
+        from facefusion.common_helper import get_first
+        from facefusion.execution import create_inference_providers, get_available_execution_providers
 
         providers = ort.get_available_providers()
         result["ort_version"] = ort.__version__
         result["ort_available_providers"] = providers
+        available_execution_providers = get_available_execution_providers()
+        result["facefusion_available_execution_providers"] = available_execution_providers
         try:
             ort.InferenceSession(model_path, providers=providers)
-            result["session_create_ok"] = True
+            result["session_create_ok_all_ort_providers"] = True
         except Exception as exc:
-            result["session_create_ok"] = False
-            result["exception_type"] = type(exc).__name__
-            result["exception_message"] = str(exc)
-            result["traceback_last_line"] = traceback.format_exc().strip().split("\n")[-1]
+            result["session_create_ok_all_ort_providers"] = False
+            result["all_ort_providers_exception"] = f"{type(exc).__name__}: {exc}"
+
+        provider_sets = {
+            "default": [get_first(available_execution_providers)] if available_execution_providers else ["cpu"],
+            "cuda_cpu": ["cuda", "cpu"],
+        }
+        for label, execution_providers in provider_sets.items():
+            try:
+                inference_providers = create_inference_providers(0, execution_providers)
+                ort.InferenceSession(model_path, providers=inference_providers)
+                result[f"session_create_ok_{label}"] = True
+            except Exception as exc:
+                result[f"session_create_ok_{label}"] = False
+                result[f"exception_{label}"] = f"{type(exc).__name__}: {exc}"
     except Exception as exc:
         result["diagnostic_error"] = f"{type(exc).__name__}: {exc}"
     return result
 
 
+def _elapsed_ms(start_time):
+    return int((time() - start_time) * 1000)
+
+
 def handler(event):
     tmpdir = tempfile.mkdtemp(prefix="ff_")
+    handler_started = time()
+    timings = {}
     try:
         payload = event.get("input") or {}
 
@@ -201,13 +244,17 @@ def handler(event):
         face_swapper_model = payload.get("face_swapper_model")
         extra_args = payload.get("extra_args") or []
 
+        phase_started = time()
         source_path = os.path.join(tmpdir, f"source.{src_fmt}")
         with open(source_path, "wb") as fh:
             fh.write(base64.b64decode(src_b64))
+        timings["decode_source_ms"] = _elapsed_ms(phase_started)
 
         target_ext = os.path.splitext(urlparse(target_url).path)[1] or ".mp4"
         target_path = os.path.join(tmpdir, f"target{target_ext}")
+        phase_started = time()
         _download_target(target_url, target_path)
+        timings["download_target_ms"] = _elapsed_ms(phase_started)
 
         output_path = os.path.join(tmpdir, f"output.{output_format}")
 
@@ -223,10 +270,22 @@ def handler(event):
         if extra_args:
             cmd += [str(a) for a in extra_args]
 
+        agent_debug_path = "/tmp/facefusion_agent_debug.ndjson"
+        try:
+            os.remove(agent_debug_path)
+        except OSError:
+            pass
+
+        phase_started = time()
         proc = subprocess.run(cmd, capture_output=True, text=True)
+        timings["facefusion_ms"] = _elapsed_ms(phase_started)
         if proc.returncode != 0 or not os.path.exists(output_path):
             yolo_diagnostics = None
-            if "loading model yoloface_8n failed" in (proc.stderr or ""):
+            subprocess_agent_debug = _read_subprocess_agent_debug()
+            if "loading model yoloface_8n failed" in (proc.stderr or "") or any(
+                entry.get("location") == "inference_manager.py:create_inference_session:failed"
+                for entry in subprocess_agent_debug
+            ):
                 _debug_log(
                     "H1",
                     "handler.py:headless-run-failure",
@@ -243,29 +302,43 @@ def handler(event):
                     "captured local yoloface load diagnostics",
                     yolo_diagnostics,
                 )
+            diagnostics = {}
+            if yolo_diagnostics:
+                diagnostics["yolo_model_load"] = yolo_diagnostics
+            if subprocess_agent_debug:
+                diagnostics["subprocess_agent_debug"] = subprocess_agent_debug
+            timings["handler_total_ms"] = _elapsed_ms(handler_started)
             return {
                 "error": f"headless-run failed (exit {proc.returncode})",
                 "stderr": _tail(proc.stderr),
                 "stdout": _tail(proc.stdout),
-                "diagnostics": {"yolo_model_load": yolo_diagnostics} if yolo_diagnostics else {},
+                "diagnostics": diagnostics,
+                "timings": timings,
             }
 
         bucket = _resolve_bucket(target_url)
         if not bucket:
-            return {"error": "R2 bucket not configured"}
+            timings["handler_total_ms"] = _elapsed_ms(handler_started)
+            return {"error": "R2 bucket not configured", "timings": timings}
 
         key = f"outputs/{uuid.uuid4().hex}.{output_format}"
+        phase_started = time()
         output_url = _upload_output(output_path, key, bucket)
+        timings["upload_output_ms"] = _elapsed_ms(phase_started)
+        timings["handler_total_ms"] = _elapsed_ms(handler_started)
 
         return {
             "output_url": output_url,
             "output_key": key,
             "bucket": bucket,
+            "timings": timings,
         }
     except Exception as exc:
+        timings["handler_total_ms"] = _elapsed_ms(handler_started)
         return {
             "error": str(exc),
             "traceback": traceback.format_exc(),
+            "timings": timings,
         }
     finally:
         try:

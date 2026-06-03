@@ -1,11 +1,13 @@
 import importlib
 import random
+import subprocess
 from time import sleep, time
-from typing import List
+from typing import List, Optional
 
 from onnxruntime import InferenceSession
 
 from facefusion import logger, process_manager, state_manager, translator
+from facefusion.agent_debug_log import agent_debug_log
 from facefusion.app_context import detect_app_context
 from facefusion.common_helper import is_windows
 from facefusion.execution import create_inference_providers, has_execution_provider
@@ -67,18 +69,69 @@ def clear_inference_pool(module_name : str, model_names : List[str]) -> None:
 			del INFERENCE_POOL_SET[app_context][inference_context]
 
 
+def snapshot_gpu_memory() -> Optional[str]:
+	try:
+		result = subprocess.run(
+			[
+				'nvidia-smi',
+				'--query-gpu=memory.used,memory.free,memory.total',
+				'--format=csv,noheader,nounits'
+			],
+			capture_output = True,
+			text = True,
+			timeout = 5
+		)
+		if result.returncode == 0:
+			return result.stdout.strip()
+	except Exception:
+		pass
+	return None
+
+
 def create_inference_session(model_path : str, execution_device_id : int, execution_providers : List[ExecutionProvider]) -> InferenceSession:
 	model_file_name = get_file_name(model_path)
 	start_time = time()
+	inference_providers = None
 
 	try:
 		inference_providers = create_inference_providers(execution_device_id, execution_providers)
+		# #region agent log
+		agent_debug_log(
+			'H3',
+			'inference_manager.py:create_inference_session:before',
+			'creating onnxruntime session',
+			{
+				'model_file_name': model_file_name,
+				'execution_device_id': execution_device_id,
+				'execution_providers': execution_providers,
+				'inference_provider_names': [ provider[0] if isinstance(provider, tuple) else provider for provider in inference_providers ],
+				'gpu_mem': snapshot_gpu_memory()
+			}
+		)
+		# #endregion
 		inference_session = InferenceSession(model_path, providers = inference_providers)
 		logger.debug(translator.get('loading_model_succeeded').format(model_name = model_file_name, seconds = calculate_end_time(start_time)), __name__)
 		return inference_session
 
-	except Exception:
-		logger.error(translator.get('loading_model_failed').format(model_name = model_file_name), __name__)
+	except Exception as exception:
+		# #region agent log
+		agent_debug_log(
+			'H1',
+			'inference_manager.py:create_inference_session:failed',
+			'onnxruntime session create failed',
+			{
+				'model_file_name': model_file_name,
+				'model_path': model_path,
+				'execution_device_id': execution_device_id,
+				'execution_providers': execution_providers,
+				'inference_provider_names': [ provider[0] if isinstance(provider, tuple) else provider for provider in inference_providers ] if inference_providers else [],
+				'exception_type': type(exception).__name__,
+				'exception_message': str(exception),
+				'gpu_mem': snapshot_gpu_memory()
+			}
+		)
+		# #endregion
+		logger.error(translator.get('loading_model_failed').format(model_name = model_file_name) + f': {exception}', __name__)
 		fatal_exit(1)
 
 

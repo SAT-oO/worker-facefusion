@@ -63,3 +63,17 @@ environment:
 
 Remove the `minio` service and skip step 2/4 (upload the target to R2 once
 manually). The rest of `run_e2e.sh` works unchanged.
+
+Benchmark (RunPod serverless)
+-----------------------------
+
+For FlashBoot-aware cold-start and load testing against a live endpoint, see
+[`benchmark/README.md`](benchmark/README.md).
+
+Quick start:
+
+```bash
+cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
+export RUNPOD_API_KEY=... RUNPOD_ENDPOINT_ID=...
+python3 tests/runpod/benchmark/run_benchmark.py --scenario cold_flashboot --profile fast_nvenc --target 120s
+```
