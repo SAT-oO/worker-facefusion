@@ -141,6 +141,7 @@ Profiles
 | `baseline_e2e` | Current quality-first settings (libx264 veryslow, 512 boost) |
 | `fast_nvenc` | Latency target profile (CUDA, NVENC, 256 boost, 4 threads) |
 | `fast_nvenc_threads8` | Same as fast_nvenc with 8 execution threads |
+| `sla_45s` | 128 boost, 0.5 scale, 8 threads, NVENC ultrafast, jpeg temps (~40–50s facefusion target on 2min) |
 
 Suggested calibration order
 ---------------------------
