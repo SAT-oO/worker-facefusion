@@ -64,9 +64,9 @@ Read the [documentation](https://docs.facefusion.io) for a deep dive.
 RunPod Serverless
 -----------------
 
-This fork ships a RunPod serverless worker (`handler.py`) that runs `facefusion.py headless-run` for face swap jobs and uploads the result to Cloudflare R2.
+This fork ships a RunPod serverless worker in [`runpod_serverless/`](runpod_serverless/) that runs `facefusion.py headless-run` for face swap jobs and uploads the result to Cloudflare R2.
 
-**For full setup and integration specs** — RunPod endpoint configuration, environment variables, request/response contracts, R2 URL rules, calling the API from your application, FlashBoot, performance profiles, and local testing — see **[RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)**.
+**Integration docs (简体中文):** **[runpod_serverless/README.md](runpod_serverless/README.md)** — endpoint setup, environment variables, API contracts, R2, benchmarks. English: [runpod_serverless/RUNPOD_SERVERLESS.md](runpod_serverless/RUNPOD_SERVERLESS.md).
 
 Quick start:
 
@@ -75,4 +75,4 @@ docker build -t <registry>/worker-facefusion:latest .
 docker push <registry>/worker-facefusion:latest
 ```
 
-Create a RunPod serverless endpoint from that image, set the `R2_*` variables documented in `RUNPOD_SERVERLESS.md`, and submit jobs via `POST https://api.runpod.ai/v2/{endpoint_id}/run`. For local testing: `python handler.py` with [`test_input.json`](test_input.json) in the repo root, or `bash tests/runpod/run_e2e.sh` for a full GPU stack.
+Create a RunPod serverless endpoint from that image, set the `R2_*` variables in the docs above, and submit jobs via `POST https://api.runpod.ai/v2/{endpoint_id}/run`. For local testing: `python runpod_serverless/handler.py` with [`runpod_serverless/test_input.json`](runpod_serverless/test_input.json), or `bash runpod_serverless/tests/run_e2e.sh` for a full GPU stack.

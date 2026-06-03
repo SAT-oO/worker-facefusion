@@ -15,6 +15,13 @@ from botocore.client import Config
 
 import runpod
 
+_RUNPOD_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_RUNPOD_DIR)
+
+
+def _models_dir():
+    return os.path.join(_REPO_ROOT, ".assets", "models")
+
 
 # #region startup self-check (debug)
 def _startup_self_check():
@@ -25,7 +32,7 @@ def _startup_self_check():
               f"onnx={onnx.__version__} onnxruntime={onnxruntime.__version__} "
               f"scipy={scipy.__version__}", flush=True)
         print(f"[startup] ort providers: {onnxruntime.get_available_providers()}", flush=True)
-        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".assets", "models")
+        models_dir = _models_dir()
         if os.path.isdir(models_dir):
             files = sorted(os.listdir(models_dir))
             swapper = [f for f in files if "swap" in f.lower() or "hyperswap" in f.lower()]
@@ -179,7 +186,7 @@ def _read_subprocess_agent_debug():
 
 
 def _diagnose_yolo_model_load():
-    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".assets", "models", "yoloface_8n.onnx")
+    model_path = os.path.join(_models_dir(), "yoloface_8n.onnx")
     result = {
         "model_path": model_path,
         "model_exists": os.path.isfile(model_path),
@@ -259,7 +266,9 @@ def handler(event):
         output_path = os.path.join(tmpdir, f"output.{output_format}")
 
         cmd = [
-            sys.executable, "facefusion.py", "headless-run",
+            sys.executable,
+            os.path.join(_REPO_ROOT, "facefusion.py"),
+            "headless-run",
             "--source-paths", source_path,
             "--target-path", target_path,
             "--output-path", output_path,
@@ -277,7 +286,7 @@ def handler(event):
             pass
 
         phase_started = time()
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=_REPO_ROOT)
         timings["facefusion_ms"] = _elapsed_ms(phase_started)
         if proc.returncode != 0 or not os.path.exists(output_path):
             yolo_diagnostics = None

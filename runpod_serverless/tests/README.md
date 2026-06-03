@@ -16,7 +16,7 @@ Run
 ---
 
 ```bash
-bash tests/runpod/run_e2e.sh
+bash runpod_serverless/tests/run_e2e.sh
 ```
 
 First invocation builds the worker image (CUDA + pip deps + model pre-download),
@@ -25,10 +25,10 @@ which can take 10-30 minutes. Subsequent runs reuse the cache.
 Set `KEEP_UP=1` to leave the stack running for manual poking:
 
 ```bash
-KEEP_UP=1 bash tests/runpod/run_e2e.sh
+KEEP_UP=1 bash runpod_serverless/tests/run_e2e.sh
 # MinIO console: http://localhost:9001  (minioadmin / minioadmin)
 # Worker API:    http://localhost:8000/runsync
-docker compose -f tests/runpod/docker-compose.e2e.yml down -v
+docker compose -f runpod_serverless/tests/docker-compose.e2e.yml down -v
 ```
 
 What it does
@@ -73,7 +73,7 @@ For FlashBoot-aware cold-start and load testing against a live endpoint, see
 Quick start:
 
 ```bash
-cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
+cp runpod_serverless/tests/benchmark/config.example.json runpod_serverless/tests/benchmark/config.json
 export RUNPOD_API_KEY=... ENDPOINT_ID=...
-python3 tests/runpod/benchmark/run_benchmark.py --scenario cold_flashboot --profile fast_nvenc --target 120s
+python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario cold_flashboot --profile fast_nvenc --target 120s
 ```
