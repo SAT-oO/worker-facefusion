@@ -6,7 +6,7 @@ Benchmark harness for the FaceFusion serverless worker. Submits jobs to a live R
 Prerequisites
 -------------
 
-- A deployed RunPod serverless endpoint (image + `R2_*` env vars). See [RUNPOD_SERVERLESS.md](../../../RUNPOD_SERVERLESS.md) for worker setup.
+- A deployed RunPod serverless endpoint (image + `R2_*` env vars). See [RUNPOD_SERVERLESS.md](../../RUNPOD_SERVERLESS.md) for worker setup.
 - `RUNPOD_API_KEY` and the endpoint ID.
 - Target videos on R2 (or any URL the worker can download) — typically 60s / 120s / 300s clips for your SLA range.
 
@@ -15,10 +15,10 @@ One-time setup
 
 ```bash
 # Source face fixture (base64) used in every job
-bash tests/runpod/fetch_fixtures.sh
+bash runpod_serverless/tests/fetch_fixtures.sh
 
 # Local config (gitignored if you copy from example)
-cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
+cp runpod_serverless/tests/benchmark/config.example.json runpod_serverless/tests/benchmark/config.json
 ```
 
 Edit `config.json`:
@@ -45,32 +45,32 @@ From the repo root:
 
 ```bash
 # Cold start: scale-down gap between jobs (default 90s idle, 10 iterations)
-python3 tests/runpod/benchmark/run_benchmark.py \
+python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario cold_flashboot \
   --profile fast_nvenc \
   --target 120s
 
 # Warm: back-to-back jobs (no idle wait)
-python3 tests/runpod/benchmark/run_benchmark.py \
+python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario warm \
   --profile fast_nvenc \
   --target 120s
 
 # Concurrent burst (default concurrency from config, often 4)
-python3 tests/runpod/benchmark/run_benchmark.py \
+python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario concurrent \
   --profile fast_nvenc \
   --target 120s
 
 # Compare profiles on the same fixture
-python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile baseline_e2e --target 120s
-python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
+python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --profile baseline_e2e --target 120s
+python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
 ```
 
 Useful overrides:
 
 ```bash
-python3 tests/runpod/benchmark/run_benchmark.py \
+python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario warm --profile fast_nvenc --target 120s \
   --target-url "https://..." \
   --iterations 5 \
@@ -120,7 +120,7 @@ Each run writes:
 Analyze across runs:
 
 ```bash
-python3 tests/runpod/benchmark/analyze_results.py tests/runpod/benchmark/results/*.jsonl
+python3 runpod_serverless/tests/benchmark/analyze_results.py runpod_serverless/tests/benchmark/results/*.jsonl
 ```
 
 Recorded fields (per job):

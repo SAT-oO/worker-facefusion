@@ -1,5 +1,7 @@
 # RunPod Serverless — Integration Guide
 
+> Simplified Chinese (GitHub folder preview): [README.md](README.md).
+
 This document is the technical specification for internal teams wiring an existing application to the FaceFusion RunPod serverless worker in this repository.
 
 The worker accepts a face-swap job over RunPod’s API, runs `facefusion.py headless-run` on GPU, and uploads the rendered video to Cloudflare R2 (or any S3-compatible store configured via env vars).
@@ -14,7 +16,7 @@ The worker accepts a face-swap job over RunPod’s API, runs `facefusion.py head
 
 
 Entry point: `handler.py` → `runpod.serverless.start({"handler": handler})`.  
-Container command: `python3 -u handler.py` (see `Dockerfile`).
+Container command: `python3 -u runpod_serverless/handler.py` (see repo root `Dockerfile`).
 
 ---
 
@@ -38,7 +40,7 @@ docker pull satoo869/worker-facefusion:latest
 The build:
 
 - Base: `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`, Python 3.11, FFmpeg.
-- Installs `requirements.txt` + `requirements-runpod.txt` and `onnxruntime-gpu==1.24.4`.
+- Installs `requirements.txt` + `runpod_serverless/requirements-runpod.txt` and `onnxruntime-gpu==1.24.4`.
 - Runs `tools/preload_face_swap_models.py` and verifies core ONNX files under `.assets/models/`.
 
 First local build can take **10–30 minutes** (model download). CI/registry caches speed this up afterward.
@@ -103,7 +105,7 @@ RunPod FlashBoot (when enabled) affects **cold start**, not the request schema:
 
 Snapshots are **not** baked into the Docker image at push time. A new image tag invalidates snapshots; scheduling onto a new host pays a full boot once.
 
-For production-like cold-start measurement, see `[tests/runpod/benchmark/README.md](tests/runpod/benchmark/README.md)`.
+For production-like cold-start measurement, see `[runpod_serverless/tests/benchmark/README.md](runpod_serverless/tests/benchmark/README.md)`.
 
 ---
 
@@ -207,8 +209,8 @@ Minimal example:
 
 Reference payloads:
 
-- Repo root: `[test_input.json](test_input.json)` (RunPod local `python handler.py` convention).
-- E2E: `[tests/runpod/sample_input.json](tests/runpod/sample_input.json)` (includes example `extra_args` and `policy`).
+- This directory: `[test_input.json](test_input.json)` (RunPod local `python runpod_serverless/handler.py` convention).
+- E2E: `[runpod_serverless/tests/sample_input.json](runpod_serverless/tests/sample_input.json)` (includes example `extra_args` and `policy`).
 
 ### Request-level `policy` (RunPod platform)
 
@@ -274,7 +276,7 @@ Handler return value (also appears as `output` on completed jobs):
 
 FaceFusion CLI flags are passed through `extra_args` unchanged. Your app can expose a quality/latency preset by mapping to flag sets.
 
-Benchmark profiles in `[tests/runpod/benchmark/config.example.json](tests/runpod/benchmark/config.example.json)`:
+Benchmark profiles in `[runpod_serverless/tests/benchmark/config.example.json](runpod_serverless/tests/benchmark/config.example.json)`:
 
 
 | Profile               | Intent                                                             |
@@ -366,8 +368,8 @@ At container start, `handler.py` logs Python/package versions, ONNX Runtime prov
 ### Quick handler test (RunPod convention)
 
 ```bash
-# test_input.json in repo root — edit target_url and source base64
-python handler.py
+# test_input.json in this directory — edit target_url and source base64
+python runpod_serverless/handler.py
 ```
 
 ### Full GPU e2e (MinIO + worker)
@@ -375,22 +377,22 @@ python handler.py
 Requires Docker, NVIDIA Container Toolkit, GPU.
 
 ```bash
-bash tests/runpod/run_e2e.sh
+bash runpod_serverless/tests/run_e2e.sh
 ```
 
-Details: `[tests/runpod/README.md](tests/runpod/README.md)`.
+Details: `[runpod_serverless/tests/README.md](runpod_serverless/tests/README.md)`.
 
 ### Live endpoint benchmark
 
 ```bash
-bash tests/runpod/fetch_fixtures.sh
-cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
+bash runpod_serverless/tests/fetch_fixtures.sh
+cp runpod_serverless/tests/benchmark/config.example.json runpod_serverless/tests/benchmark/config.json
 # Edit endpoint_id and target URLs
 export RUNPOD_API_KEY=... ENDPOINT_ID=...
-python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
+python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
 ```
 
-Details: `[tests/runpod/benchmark/README.md](tests/runpod/benchmark/README.md)`.
+Details: `[runpod_serverless/tests/benchmark/README.md](runpod_serverless/tests/benchmark/README.md)`.
 
 ---
 
@@ -428,6 +430,6 @@ Align these so long videos do not fail spuriously:
 | `[Dockerfile](Dockerfile)`                           | Production image                  |
 | `[requirements-runpod.txt](requirements-runpod.txt)` | RunPod worker Python deps         |
 | `[test_input.json](test_input.json)`                 | Local handler smoke input         |
-| `[tests/runpod/](tests/runpod/)`                     | E2E and benchmark harness         |
+| `[tests/](tests/)`                                   | E2E and benchmark harness         |
 
 

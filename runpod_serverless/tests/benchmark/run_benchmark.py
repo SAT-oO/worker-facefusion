@@ -291,14 +291,14 @@ def resolve_target_url(
     sample_url = _sample_input_target_url()
     if sample_url:
         print(
-            f"[warn] target '{target_key}' unset ({url}); using tests/runpod/sample_input.json target_url",
+            f"[warn] target '{target_key}' unset ({url}); using runpod_serverless/tests/sample_input.json target_url",
             file=sys.stderr,
         )
         return sample_url
 
     raise ValueError(
         f"target '{target_key}' is unset ({url}). Set the env var, add a URL in config.json targets, "
-        f"pass --target-url, or set target_url in tests/runpod/sample_input.json"
+        f"pass --target-url, or set target_url in runpod_serverless/tests/sample_input.json"
     )
 
 
@@ -347,7 +347,7 @@ def main() -> int:
     source_b64_path = (config_path.parent / config["fixtures"]["source_b64_path"]).resolve()
     if not source_b64_path.exists():
         print(f"Missing source b64 fixture: {source_b64_path}", file=sys.stderr)
-        print("Run: bash tests/runpod/fetch_fixtures.sh", file=sys.stderr)
+        print("Run: bash runpod_serverless/tests/fetch_fixtures.sh", file=sys.stderr)
         return 1
     source_b64 = source_b64_path.read_text(encoding="utf-8").strip()
 

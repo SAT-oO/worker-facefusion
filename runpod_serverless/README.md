@@ -1,6 +1,8 @@
 # RunPod Serverless — 集成接口文档
 
-本文档为内部团队将现有应用接入本仓库 FaceFusion RunPod Serverless Worker 的技术规格说明。英文版见 [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
+> GitHub 浏览 `runpod_serverless/` 目录时默认显示本文档（简体中文）。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
+
+本文档为内部团队将现有应用接入本仓库 FaceFusion RunPod Serverless Worker 的技术规格说明。
 
 Worker 通过 RunPod API 接收换脸任务，在 GPU 上执行 `facefusion.py headless-run`，并将渲染后的视频上传至 Cloudflare R2（或通过环境变量配置的任意 S3 兼容存储）。
 
@@ -14,7 +16,7 @@ Worker 通过 RunPod API 接收换脸任务，在 GPU 上执行 `facefusion.py h
 
 
 app 指令入口：`handler.py` → `runpod.serverless.start({"handler": handler})`。  
-容器启动命令：`python3 -u handler.py`（见 `Dockerfile`）。
+容器启动命令：`python3 -u runpod_serverless/handler.py`（见仓库根目录 `Dockerfile`）。
 
 ---
 
@@ -38,7 +40,7 @@ docker pull satoo869/worker-facefusion:latest
 构建说明：
 
 - 基础镜像：`nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`，Python 3.11，FFmpeg。
-- 安装 `requirements.txt` + `requirements-runpod.txt` 以及 `onnxruntime-gpu==1.24.4`。
+- 安装 `requirements.txt` + `runpod_serverless/requirements-runpod.txt` 以及 `onnxruntime-gpu==1.24.4`。
 - 执行 `tools/preload_face_swap_models.py`，并校验 `.assets/models/` 下的核心 ONNX 文件。
 
 首次本地构建约需 **10–30 分钟**（含模型下载）；之后可由 CI/镜像仓库缓存加速。
@@ -103,7 +105,7 @@ docker pull satoo869/worker-facefusion:latest
 
 快照 **不会** 在 `docker push` 时写入镜像；新镜像标签会使快照失效；调度到新主机仍会完整冷启动一次。
 
-生产级冷启动测量见 `[tests/runpod/benchmark/README.md](tests/runpod/benchmark/README.md)`。
+生产级冷启动测量见 `[runpod_serverless/tests/benchmark/README.md](runpod_serverless/tests/benchmark/README.md)`。
 
 ---
 
@@ -207,8 +209,8 @@ Handler 下载目标素材的逻辑：
 
 参考载荷：
 
-- 仓库根目录：[test_input.json](test_input.json)（RunPod 本地 `python handler.py` 约定）
-- 端到端：[tests/runpod/sample_input.json](tests/runpod/sample_input.json)（含 `extra_args`、`policy` 示例）
+- [test_input.json](test_input.json)（本目录）（RunPod 本地 `python runpod_serverless/handler.py` 约定）
+- 端到端：[runpod_serverless/tests/sample_input.json](runpod_serverless/tests/sample_input.json)（含 `extra_args`、`policy` 示例）
 
 ### 请求级 `policy`（RunPod 平台）
 
@@ -274,7 +276,7 @@ Handler 返回值（已完成任务的 `output` 字段内容相同）：
 
 FaceFusion CLI 参数经 `extra_args` 原样透传。应用可将画质/延迟预设映射为不同参数组。
 
-基准配置档见 `[tests/runpod/benchmark/config.example.json](tests/runpod/benchmark/config.example.json)`：
+基准配置档见 `[runpod_serverless/tests/benchmark/config.example.json](runpod_serverless/tests/benchmark/config.example.json)`：
 
 
 | 配置档（Profile）          | 定位                                                |
@@ -366,8 +368,8 @@ FaceFusion CLI 参数经 `extra_args` 原样透传。应用可将画质/延迟�
 ### 快速 Handler 测试（RunPod 约定）
 
 ```bash
-# 编辑仓库根目录 test_input.json 中的 target_url 与 source base64
-python handler.py
+# 编辑本目录 test_input.json 中的 target_url 与 source base64
+python runpod_serverless/handler.py
 ```
 
 ### 完整 GPU 端到端（MinIO + Worker）
@@ -375,22 +377,22 @@ python handler.py
 需要 Docker、NVIDIA Container Toolkit、GPU。
 
 ```bash
-bash tests/runpod/run_e2e.sh
+bash runpod_serverless/tests/run_e2e.sh
 ```
 
-详见 `[tests/runpod/README.md](tests/runpod/README.md)`。
+详见 `[runpod_serverless/tests/README.md](runpod_serverless/tests/README.md)`。
 
 ### 线上端点基准测试
 
 ```bash
-bash tests/runpod/fetch_fixtures.sh
-cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
+bash runpod_serverless/tests/fetch_fixtures.sh
+cp runpod_serverless/tests/benchmark/config.example.json runpod_serverless/tests/benchmark/config.json
 # 编辑 endpoint_id 与 target URL
 export RUNPOD_API_KEY=... ENDPOINT_ID=...
-python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
+python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
 ```
 
-详见 `[tests/runpod/benchmark/README.md](tests/runpod/benchmark/README.md)`。
+详见 `[runpod_serverless/tests/benchmark/README.md](runpod_serverless/tests/benchmark/README.md)`。
 
 ---
 
@@ -428,6 +430,6 @@ python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile fast_n
 | `[Dockerfile](Dockerfile)`                           | 生产镜像                    |
 | `[requirements-runpod.txt](requirements-runpod.txt)` | RunPod Worker Python 依赖 |
 | `[test_input.json](test_input.json)`                 | 本地 Handler 冒烟输入         |
-| `[tests/runpod/](tests/runpod/)`                     | 端到端与基准测试工具              |
+| `[tests/](tests/)`                                   | 端到端与基准测试工具              |
 
 

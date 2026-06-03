@@ -25,7 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt requirements-runpod.txt ./
+COPY requirements.txt ./
+COPY runpod_serverless/requirements-runpod.txt ./requirements-runpod.txt
 
 RUN python -m pip install --upgrade pip \
     && pip install -r requirements.txt \
@@ -96,4 +97,4 @@ WORKDIR /app
 COPY . .
 COPY --from=models /app/.assets /app/.assets
 
-CMD ["python3", "-u", "handler.py"]
+CMD ["python3", "-u", "runpod_serverless/handler.py"]
