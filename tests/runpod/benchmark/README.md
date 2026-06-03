@@ -1,152 +1,153 @@
 RunPod Benchmark
 ================
 
-Load and latency benchmarks for the FaceFusion serverless worker, designed
-around **FlashBoot enabled** (production default).
-
-FlashBoot: what it does
------------------------
-
-RunPod FlashBoot is two related mechanisms:
-
-1. **Image pre-cache on the host** — what you see in idle-worker system logs
-   ("docker image already downloaded"). RunPod keeps your endpoint image on the
-   GPU host so scale-from-zero does not re-pull the full image every time.
-
-2. **Process snapshot restore (CRIU-style)** — when a worker scales to zero
-   after handling a job, RunPod can snapshot the running worker process,
-   including Python heap and **GPU VRAM** (ONNX models already loaded). The
-   next scale-up on the **same host + same image SHA** restores that snapshot
-   instead of cold-booting Python and reloading models from disk.
-
-FlashBoot does **not** bake extra state into the image at release/push time.
-Snapshots are taken at **scale-down after a job**, scoped to `(host, image SHA)`.
-A new image tag invalidates snapshots. Scheduling onto a **new host** pays the
-full fresh-boot cost once (image may still be cached, but VRAM reload happens).
-
-That is why benchmarks here measure two cold-start classes via `delayTime`:
-
-| Class | Typical signal | Meaning |
-|-------|----------------|---------|
-| `flashboot_restore_or_warm` | `delayTime` ≤ 30s (configurable) | Snapshot restore or worker still warm |
-| `fresh_boot_or_miss` | `delayTime` > 30s | New host, new image, or snapshot miss |
-
-Endpoint settings (FlashBoot ON)
---------------------------------
-
-Use these for realistic production cold-start testing:
-
-| Setting | Recommended | Why |
-|---------|-------------|-----|
-| FlashBoot | **On** | Production behavior |
-| Active workers (min) | **0** | Avoid permanently warm workers |
-| Idle timeout | **60s** (or min allowed) | Scale down between cold-start samples |
-| Max workers | **1** for latency A/B; **4–8** for soak | Isolate per-GPU latency vs throughput |
-| Execution timeout | **≥ 600s** for 5-min stress clips | Avoid false failures |
-
-For `cold_flashboot` runs, wait **idle_timeout + 30s** between jobs so the
-worker fully scales down and a snapshot can be written before the next request.
+Benchmark harness for the FaceFusion serverless worker. Submits jobs to a live RunPod endpoint, polls until completion, and writes latency records to `results/`.
 
 Prerequisites
 -------------
 
+- A deployed RunPod serverless endpoint (image + `R2_*` env vars). See [RUNPOD_SERVERLESS.md](../../../RUNPOD_SERVERLESS.md) for worker setup.
+- `RUNPOD_API_KEY` and the endpoint ID.
+- Target videos on R2 (or any URL the worker can download) — typically 60s / 120s / 300s clips for your SLA range.
+
+One-time setup
+--------------
+
 ```bash
+# Source face fixture (base64) used in every job
 bash tests/runpod/fetch_fixtures.sh
+
+# Local config (gitignored if you copy from example)
 cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
-# Edit config.json: endpoint_id, target URLs (60s / 120s / 300s fixtures on R2)
-export RUNPOD_API_KEY=...
-export ENDPOINT_ID=...
 ```
 
-Target URLs can also be passed via env vars referenced in config:
+Edit `config.json`:
+
+| Field | What to set |
+| --- | --- |
+| `endpoint_id` | RunPod serverless endpoint ID, or `${ENDPOINT_ID}` and export `ENDPOINT_ID` |
+| `targets` | HTTPS URLs for each clip key (`60s`, `120s`, `300s`) |
+| `fixtures.default_target_key` | Default `--target` when omitted (e.g. `120s`) |
+
+Target URLs via environment (referenced in config as `${BENCHMARK_TARGET_120S_URL}` etc.):
 
 ```bash
-export BENCHMARK_TARGET_120S_URL="https://your-r2.../target_120s.mp4"
-export BENCHMARK_TARGET_300S_URL="https://your-r2.../target_300s.mp4"
+export RUNPOD_API_KEY=...
+export ENDPOINT_ID=...   # if using ${ENDPOINT_ID} in config
+export BENCHMARK_TARGET_120S_URL="https://your-bucket.../target_120s.mp4"
+export BENCHMARK_TARGET_300S_URL="https://your-bucket.../target_300s.mp4"
 ```
 
 Run
 ---
 
+From the repo root:
+
 ```bash
-# Cold start with FlashBoot (10 samples, 90s idle between jobs)
+# Cold start: scale-down gap between jobs (default 90s idle, 10 iterations)
 python3 tests/runpod/benchmark/run_benchmark.py \
   --scenario cold_flashboot \
   --profile fast_nvenc \
   --target 120s
 
-# Warm steady-state (20 back-to-back jobs)
+# Warm: back-to-back jobs (no idle wait)
 python3 tests/runpod/benchmark/run_benchmark.py \
   --scenario warm \
   --profile fast_nvenc \
   --target 120s
 
-# Concurrent burst (4 parallel jobs)
+# Concurrent burst (default concurrency from config, often 4)
 python3 tests/runpod/benchmark/run_benchmark.py \
   --scenario concurrent \
   --profile fast_nvenc \
-  --target 120s \
-  --concurrency 4
+  --target 120s
 
-# Compare baseline vs optimized profile on same fixture
+# Compare profiles on the same fixture
 python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile baseline_e2e --target 120s
 python3 tests/runpod/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
 ```
 
-Results land in `tests/runpod/benchmark/results/*.jsonl` plus a `.summary.json`
-with p50/p90/p99 for `delayTime`, `executionTime`, and end-to-end wall time.
+Useful overrides:
 
-Analyze:
+```bash
+python3 tests/runpod/benchmark/run_benchmark.py \
+  --scenario warm --profile fast_nvenc --target 120s \
+  --target-url "https://..." \
+  --iterations 5 \
+  --wait-after-job 0 \
+  --concurrency 2
+```
+
+| Flag | Purpose |
+| --- | --- |
+| `--config` | Path to config JSON (default: `config.json` in this directory) |
+| `--scenario` | `cold_flashboot`, `warm`, or `concurrent` |
+| `--profile` | Name from `config.profiles` (e.g. `fast_nvenc`) |
+| `--target` | Key from `config.targets` (e.g. `120s`) |
+| `--target-url` | Override target URL (skips `config.targets`) |
+| `--iterations` | Override scenario iteration count |
+| `--concurrency` | Parallel jobs per batch |
+| `--wait-after-job` | Seconds to sleep between batches (cold scenario) |
+| `--output` | Custom JSONL path |
+
+Scenarios (in `config.json` → `scenarios`)
+-------------------------------------------
+
+| Scenario | Default behavior |
+| --- | --- |
+| `cold_flashboot` | 10 jobs, 90s wait between jobs, concurrency 1 |
+| `warm` | 20 jobs, no wait, concurrency 1 |
+| `concurrent` | 1 batch with concurrency 4 |
+
+Profiles (in `config.json` → `profiles`)
+----------------------------------------
+
+| Profile | Purpose |
+| --- | --- |
+| `baseline_e2e` | Quality-first: libx264 veryslow, 512×512 pixel boost |
+| `fast_nvenc` | Latency-oriented: CUDA, NVENC, 256×256 boost, 4 threads |
+| `fast_nvenc_threads8` | Same as `fast_nvenc` with 8 threads |
+| `sla_45s` | Aggressive SLA preset (see `extra_args` in config) |
+
+Results
+-------
+
+Each run writes:
+
+- `results/<timestamp>_<scenario>_<profile>.jsonl` — one JSON object per job
+- `results/<timestamp>_<scenario>_<profile>.summary.json` — p50/p90/p99 for `delayTime`, `executionTime`, and client `total_time_ms`
+
+Analyze across runs:
 
 ```bash
 python3 tests/runpod/benchmark/analyze_results.py tests/runpod/benchmark/results/*.jsonl
 ```
 
-Metrics
--------
+Recorded fields (per job):
 
-| Metric | Source | Use |
-|--------|--------|-----|
-| `delayTime` | RunPod job status | Queue + cold start before handler runs |
-| `executionTime` | RunPod job status | Handler wall clock |
-| `total_time_ms` | Benchmark client | Submit → completed (includes polling overhead) |
-| `timings.*` | Handler response | decode / download / facefusion / upload breakdown |
+| Field | Source |
+| --- | --- |
+| `delay_time_ms` | RunPod status (`delayTime`) |
+| `execution_time_ms` | RunPod status (`executionTime`) |
+| `total_time_ms` | Client submit → completed |
+| `handler_timings` | Handler `timings` (decode, download, facefusion, upload) |
+| `output_url` | Handler output when successful |
 
-**SLA check (1–2 min video):** compare `delayTime + executionTime` p90 on
-`fast_nvenc` + `120s` target under `cold_flashboot` vs `warm`.
-
-Timeouts (when jobs fail fast vs slow)
---------------------------------------
-
-**Fast failures (~2s `executionTime`) are almost never timeouts.** They usually
-mean the handler exited early (invalid CLI args, missing R2 env, headless-run
-error). Check `error`, `stderr_tail` in the JSONL result.
-
-| Setting | Where | Recommended for 2-min / 5-min video |
-|---------|--------|-------------------------------------|
-| `policy.executionTimeout` | Request body (`config.json` → `base_input.policy`) | **600000** ms (10 min) — already set |
-| `job_timeout_seconds` | `config.json` → `runpod` | **1800** s (30 min) — client poll limit |
-| Endpoint execution timeout | RunPod console → endpoint settings | **≥ 600 s** (match or exceed policy) |
-| `wait_after_job_seconds` | Scenario config | **90 s** for cold_flashboot only (not a compute limit) |
-
-A real 2-minute face swap typically takes **tens of seconds to several minutes**
-of `executionTime`. If you see `facefusion_ms` under ~5s, the job failed before
-processing the full video.
-
-Profiles
+Timeouts
 --------
 
-| Profile | Purpose |
-|---------|---------|
-| `baseline_e2e` | Current quality-first settings (libx264 veryslow, 512 boost) |
-| `fast_nvenc` | Latency target profile (CUDA, NVENC, 256 boost, 4 threads) |
-| `fast_nvenc_threads8` | Same as fast_nvenc with 8 execution threads |
-| `sla_45s` | 8 threads, 128 boost, 0.5 scale (min for NVENC), 15fps cap, box mask only, NVENC ultrafast |
+| Setting | Location | Default |
+| --- | --- | --- |
+| `policy.executionTimeout` | `config.json` → `base_input.policy` | 360000 ms (6 min) |
+| `job_timeout_seconds` | `config.json` → `runpod` | 1800 s (client poll limit) |
+| Endpoint execution timeout | RunPod console | **360 s** (6 min) |
 
-Suggested calibration order
----------------------------
+If `execution_time_ms` is only a few seconds, the job failed early (bad `extra_args`, missing R2 env, bad target URL). Check `error` and `stderr_tail` in the JSONL line — not a timeout.
 
-1. `warm` + `120s` — sweep profiles (`baseline_e2e` vs `fast_nvenc`) for pure compute/encode cost.
-2. `cold_flashboot` + `120s` + `fast_nvenc` — measure production cold-start SLA.
-3. `warm` + `300s` — saturation / long-job stability on A4500.
-4. `concurrent` — queue depth and whether to keep **1 job/GPU** and scale workers horizontally.
+Suggested order
+---------------
+
+1. `warm` + `120s` — compare `baseline_e2e` vs `fast_nvenc` (compute/encode only).
+2. `cold_flashboot` + `120s` + `fast_nvenc` — cold-start + idle gap between jobs.
+3. `warm` + `300s` — longer clip stability.
+4. `concurrent` — queue depth and multi-job behavior.
