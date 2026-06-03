@@ -65,17 +65,19 @@
     },
     {
       "name": "sla_45s",
-      "description": "Aggressive latency target (~40-50s facefusion on 2min video, quality tradeoffs)",
+      "description": "Fast profile: 8 threads, 0.5 scale (NVENC-safe), 15fps cap, minimal quality",
       "extra_args": [
         "--execution-providers", "cuda",
         "--execution-thread-count", "8",
         "--video-memory-strategy", "tolerant",
         "--face-swapper-pixel-boost", "128x128",
         "--output-video-scale", "0.5",
+        "--output-video-fps", "15",
         "--output-video-encoder", "h264_nvenc",
         "--output-video-preset", "ultrafast",
-        "--output-video-quality", "65",
-        "--temp-frame-format", "jpeg"
+        "--output-video-quality", "50",
+        "--temp-frame-format", "jpeg",
+        "--face-mask-types", "box"
       ]
     }
   ],

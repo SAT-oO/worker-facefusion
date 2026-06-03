@@ -445,6 +445,13 @@ def main() -> int:
     print(json.dumps(summary, indent=2))
     print(f"Wrote {output_path}")
     print(f"Wrote {summary_path}")
+
+    if records:
+        last = max(records, key=lambda r: r.get("iteration", 0))
+        print(f"\nlast_job_id={last.get('job_id', '')}")
+        if last.get("output_url"):
+            print(f"output_url={last['output_url']}")
+
     return 0 if summary["failed"] == 0 else 2
 
 
