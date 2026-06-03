@@ -20,7 +20,7 @@
     ]
   },
   "policy": {
-    "executionTimeout": 600000,
+    "executionTimeout": 360000,
     "ttl": 3600000,
     "lowPriority": false
   },

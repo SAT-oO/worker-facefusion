@@ -21,7 +21,7 @@
     "processors": ["face_swapper"],
     "face_swapper_model": "inswapper_128_fp16",
     "policy": {
-      "executionTimeout": 600000,
+      "executionTimeout": 360000,
       "ttl": 3600000,
       "lowPriority": false
     }
