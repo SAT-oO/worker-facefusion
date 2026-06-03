@@ -115,6 +115,24 @@ Metrics
 **SLA check (1–2 min video):** compare `delayTime + executionTime` p90 on
 `fast_nvenc` + `120s` target under `cold_flashboot` vs `warm`.
 
+Timeouts (when jobs fail fast vs slow)
+--------------------------------------
+
+**Fast failures (~2s `executionTime`) are almost never timeouts.** They usually
+mean the handler exited early (invalid CLI args, missing R2 env, headless-run
+error). Check `error`, `stderr_tail` in the JSONL result.
+
+| Setting | Where | Recommended for 2-min / 5-min video |
+|---------|--------|-------------------------------------|
+| `policy.executionTimeout` | Request body (`config.json` → `base_input.policy`) | **600000** ms (10 min) — already set |
+| `job_timeout_seconds` | `config.json` → `runpod` | **1800** s (30 min) — client poll limit |
+| Endpoint execution timeout | RunPod console → endpoint settings | **≥ 600 s** (match or exceed policy) |
+| `wait_after_job_seconds` | Scenario config | **90 s** for cold_flashboot only (not a compute limit) |
+
+A real 2-minute face swap typically takes **tens of seconds to several minutes**
+of `executionTime`. If you see `facefusion_ms` under ~5s, the job failed before
+processing the full video.
+
 Profiles
 --------
 

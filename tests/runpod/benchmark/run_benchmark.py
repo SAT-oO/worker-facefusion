@@ -19,6 +19,40 @@ from typing import Any
 
 DIR = Path(__file__).resolve().parent
 RUNPOD_API = "https://api.runpod.ai/v2"
+DEBUG_LOG_PATH = Path("/Users/sat-oo/worker-facefusion/.cursor/debug-31ce53.log")
+
+
+def _agent_log(hypothesis_id: str, location: str, message: str, data: dict[str, Any], run_id: str = "pre-fix") -> None:
+    # #region agent log
+    try:
+        payload = {
+            "sessionId": "31ce53",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload) + "\n")
+    except OSError:
+        pass
+    # #endregion
+
+
+def _extract_failure_details(status: dict[str, Any]) -> dict[str, Any]:
+    output = status.get("output") if isinstance(status.get("output"), dict) else {}
+    handler_error = output.get("error") if isinstance(output, dict) else None
+    runpod_error = status.get("error")
+    return {
+        "handler_error": handler_error,
+        "runpod_error": runpod_error,
+        "failure_message": handler_error or runpod_error,
+        "stderr_tail": (output.get("stderr") or "")[-500:] if isinstance(output, dict) else "",
+        "stdout_tail": (output.get("stdout") or "")[-500:] if isinstance(output, dict) else "",
+        "output_keys": sorted(output.keys()) if isinstance(output, dict) else [],
+    }
 
 
 def _utc_now() -> str:
@@ -171,15 +205,16 @@ def run_single_job(
     status = poll_job(endpoint_id, api_key, job_id, job_timeout_seconds, poll_interval)
     finished_mono = time.monotonic()
 
-    output = status.get("output") or {}
+    output = status.get("output") if isinstance(status.get("output"), dict) else {}
     delay_time_ms = status.get("delayTime")
     execution_time_ms = status.get("executionTime")
     handler_timings = output.get("timings") if isinstance(output, dict) else None
-    error = output.get("error") if isinstance(output, dict) else None
+    failure = _extract_failure_details(status)
+    error = failure.get("failure_message")
 
     total_time_ms = int((finished_mono - submit_mono) * 1000)
 
-    return {
+    record = {
         "scenario": scenario,
         "profile": profile_name,
         "target_key": target_key,
@@ -193,8 +228,30 @@ def run_single_job(
         "cold_start_class": classify_cold_start(delay_time_ms, cold_threshold_ms),
         "handler_timings": handler_timings,
         "error": error,
+        "handler_error": failure.get("handler_error"),
+        "runpod_error": failure.get("runpod_error"),
+        "stderr_tail": failure.get("stderr_tail"),
+        "stdout_tail": failure.get("stdout_tail"),
         "output_url": output.get("output_url") if isinstance(output, dict) else None,
     }
+
+    # #region agent log
+    _agent_log(
+        "H1",
+        "run_benchmark.py:run_single_job",
+        "job finished",
+        {
+            "job_id": job_id,
+            "status": record["status"],
+            "execution_time_ms": execution_time_ms,
+            "facefusion_ms": (handler_timings or {}).get("facefusion_ms"),
+            "upload_output_ms": (handler_timings or {}).get("upload_output_ms"),
+            "failure": failure,
+        },
+    )
+    # #endregion
+
+    return record
 
 
 def _sample_input_target_url() -> str | None:
@@ -348,6 +405,8 @@ def main() -> int:
             )
             if record.get("error"):
                 print(f"  error: {record['error']}")
+            if record.get("stderr_tail"):
+                print(f"  stderr: {record['stderr_tail'][:300]}")
         else:
             with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as pool:
                 futures = [

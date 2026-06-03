@@ -43,11 +43,10 @@
       "extra_args": [
         "--execution-providers", "cuda",
         "--execution-thread-count", "4",
-        "--execution-queue-count", "1",
         "--video-memory-strategy", "tolerant",
         "--face-swapper-pixel-boost", "256x256",
         "--output-video-encoder", "h264_nvenc",
-        "--output-video-preset", "p4",
+        "--output-video-preset", "fast",
         "--output-video-quality", "80"
       ]
     },
@@ -57,11 +56,10 @@
       "extra_args": [
         "--execution-providers", "cuda",
         "--execution-thread-count", "8",
-        "--execution-queue-count", "1",
         "--video-memory-strategy", "tolerant",
         "--face-swapper-pixel-boost", "256x256",
         "--output-video-encoder", "h264_nvenc",
-        "--output-video-preset", "p4",
+        "--output-video-preset", "fast",
         "--output-video-quality", "80"
       ]
     }

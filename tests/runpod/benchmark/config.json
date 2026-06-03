@@ -6,9 +6,9 @@
     "default_target_key": "120s"
   },
   "targets": {
-    "60s": "${BENCHMARK_TARGET_60S_URL}",
+    "60s": "https://pub-338a83c2f58b4e92980219df2ddf0075.r2.dev/test_input/target_video_4_1min.mp4",
     "120s": "https://pub-338a83c2f58b4e92980219df2ddf0075.r2.dev/test_input/target_video_4_2min.mp4",
-    "300s": "${BENCHMARK_TARGET_300S_URL}"
+    "300s": "https://pub-338a83c2f58b4e92980219df2ddf0075.r2.dev/test_input/target_video_4_5min.mp4"
   },
   "runpod": {
     "idle_wait_seconds": 90,
@@ -43,11 +43,10 @@
       "extra_args": [
         "--execution-providers", "cuda",
         "--execution-thread-count", "4",
-        "--execution-queue-count", "1",
         "--video-memory-strategy", "tolerant",
         "--face-swapper-pixel-boost", "256x256",
         "--output-video-encoder", "h264_nvenc",
-        "--output-video-preset", "p4",
+        "--output-video-preset", "fast",
         "--output-video-quality", "80"
       ]
     },
@@ -57,11 +56,10 @@
       "extra_args": [
         "--execution-providers", "cuda",
         "--execution-thread-count", "8",
-        "--execution-queue-count", "1",
         "--video-memory-strategy", "tolerant",
         "--face-swapper-pixel-boost", "256x256",
         "--output-video-encoder", "h264_nvenc",
-        "--output-video-preset", "p4",
+        "--output-video-preset", "fast",
         "--output-video-quality", "80"
       ]
     }
