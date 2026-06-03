@@ -74,6 +74,6 @@ Quick start:
 
 ```bash
 cp tests/runpod/benchmark/config.example.json tests/runpod/benchmark/config.json
-export RUNPOD_API_KEY=... RUNPOD_ENDPOINT_ID=...
+export RUNPOD_API_KEY=... ENDPOINT_ID=...
 python3 tests/runpod/benchmark/run_benchmark.py --scenario cold_flashboot --profile fast_nvenc --target 120s
 ```

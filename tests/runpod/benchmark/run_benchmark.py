@@ -240,7 +240,7 @@ def main() -> int:
     config = load_config(config_path)
     endpoint_id = config.get("endpoint_id")
     if not endpoint_id or endpoint_id.startswith("${"):
-        print("Set endpoint_id in config.json or RUNPOD_ENDPOINT_ID env var", file=sys.stderr)
+        print("Set endpoint_id in config.json or ENDPOINT_ID env var", file=sys.stderr)
         return 1
 
     scenario_cfg = config["scenarios"][args.scenario]
