@@ -1,6 +1,6 @@
 # RunPod Serverless — 集成与使用指南
 
-> GitHub 浏览本目录时默认显示本文档（简体中文）。完整技术规格与运维说明见 **[TECHNICAL_SPECIFICATION_CN.md](TECHNICAL_SPECIFICATION_CN.md)**。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
+> GitHub 浏览本目录时默认显示本文档（简体中文）。完整技术规格与运维说明见 **[MAINTENANCE_SPECIFICATION_CN.md](MAINTENANCE_SPECIFICATION_CN.md)**。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
 
 本目录为 FaceFusion 的 RunPod Serverless Worker：通过 RunPod API 接收换脸任务，在 GPU 上执行 `facefusion.py headless-run`，并将结果上传至 Cloudflare R2。
 
@@ -34,7 +34,7 @@ docker push <registry>/worker-facefusion:<tag>
 docker pull satoo869/worker-facefusion:latest
 ```
 
-首次本地构建约 **10–30 分钟**（含模型下载）。镜像构建细节见 [技术规格 — 镜像构建](TECHNICAL_SPECIFICATION_CN.md#image-build)。
+首次本地构建约 **10–30 分钟**（含模型下载）。镜像构建细节见 [技术规格 — 镜像构建](MAINTENANCE_SPECIFICATION_CN.md#image-build)。
 
 ### 创建 RunPod Serverless 端点
 
@@ -53,7 +53,7 @@ docker pull satoo869/worker-facefusion:latest
 | **执行超时**      | **360 s（6 分钟）**，与请求 `policy.executionTimeout` 一致 |
 
 
-FlashBoot 与端点调优说明见 [技术规格 — FlashBoot](TECHNICAL_SPECIFICATION_CN.md#flashboot)。
+FlashBoot 与端点调优说明见 [技术规格 — FlashBoot](MAINTENANCE_SPECIFICATION_CN.md#flashboot)。
 
 ### 端点环境变量（R2）
 
@@ -99,11 +99,31 @@ FlashBoot 与端点调优说明见 [技术规格 — FlashBoot](TECHNICAL_SPECIF
 
 ### 提交示例
 
+**curl**
+
 ```bash
 curl -sS -X POST "https://api.runpod.ai/v2/${ENDPOINT_ID}/run" \
   -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
   -H "Content-Type: application/json" \
   -d @body.json
+```
+
+**Python（等价请求）** — 见 [`submit_job.py`](submit_job.py)：
+
+```bash
+export RUNPOD_API_KEY=... ENDPOINT_ID=...
+
+# 使用与 curl 相同的 JSON 文件
+python runpod_serverless/submit_job.py --body body.json
+
+# 提交后轮询直至终态（对应下方「推荐集成流程」第 4 步）
+python runpod_serverless/submit_job.py --body body.json --poll
+
+# 或由本地文件构造 input（无需先写 body.json）
+python runpod_serverless/submit_job.py \
+  --source-image path/to/face.jpg \
+  --target-url "https://<bucket>.<account>.r2.cloudflarestorage.com/templates/clip.mp4" \
+  --poll
 ```
 
 `body.json`：
@@ -134,7 +154,7 @@ curl -sS -X POST "https://api.runpod.ai/v2/${ENDPOINT_ID}/run" \
 3. **提交** — `POST /run`，携带 `input` 与可选 `policy`。
 4. **轮询** — 每 2–5 秒 `GET /status/{id}` 直至 `COMPLETED` / `FAILED` / `TIMED_OUT` 等终态；客户端超时建议 ≥ **420 s**（含 6 分钟执行上限）。
 5. **取结果** — `COMPLETED` 时读 `output.output_url`，并保存 `output_key` 以便后续管理。
-6. **错误** — 失败时查看 `output.error`、`stderr`；详见 [技术规格 — 响应与排错](TECHNICAL_SPECIFICATION_CN.md#api-response)。
+6. **错误** — 失败时查看 `output.error`、`stderr`；详见 [技术规格 — 响应与排错](MAINTENANCE_SPECIFICATION_CN.md#api-response)。
 
 ### `input` 必填字段
 
@@ -147,10 +167,10 @@ curl -sS -X POST "https://api.runpod.ai/v2/${ENDPOINT_ID}/run" \
 | `output_format`       | 否   | 默认 `mp4`                                                                                       |
 | `processors`          | 否   | 默认 `["face_swapper"]`                                                                          |
 | `face_swapper_model`  | 否   | 如 `inswapper_128_fp16`                                                                         |
-| `extra_args`          | 否   | 传给 `headless-run` 的 CLI 参数；预设见 [技术规格 — 性能调优](TECHNICAL_SPECIFICATION_CN.md#performance-tuning) |
+| `extra_args`          | 否   | 传给 `headless-run` 的 CLI 参数；预设见 [技术规格 — 性能调优](MAINTENANCE_SPECIFICATION_CN.md#performance-tuning) |
 
 
-`target_url` 须为 Worker 可下载的 R2/S3 或公开 HTTPS 地址；输出写入 `outputs/{uuid}.{format}`。URL 格式与输出桶规则见 [技术规格 — R2](TECHNICAL_SPECIFICATION_CN.md#r2-storage)。
+`target_url` 须为 Worker 可下载的 R2/S3 或公开 HTTPS 地址；输出写入 `outputs/{uuid}.{format}`。URL 格式与输出桶规则见 [技术规格 — R2](MAINTENANCE_SPECIFICATION_CN.md#r2-storage)。
 
 ---
 
@@ -189,7 +209,8 @@ python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --pro
 
 | 文档                                                             | 内容                                  |
 | -------------------------------------------------------------- | ----------------------------------- |
-| [TECHNICAL_SPECIFICATION_CN.md](TECHNICAL_SPECIFICATION_CN.md) | API 响应结构、环境变量全集、超时、运维、镜像构建、性能配置档    |
+| [MAINTENANCE_SPECIFICATION_CN.md](MAINTENANCE_SPECIFICATION_CN.md) | API 响应结构、环境变量全集、超时、运维、镜像构建、性能配置档    |
+| [submit_job.py](submit_job.py)                                 | 提交任务 / 轮询状态的 Python 示例（等价于下方 curl） |
 | [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)                   | English integration & specification |
 | [test_input.json](test_input.json)                             | 本地 handler 示例载荷                     |
 | [tests/sample_input.json](tests/sample_input.json)             | 含 `policy` / `extra_args` 的 e2e 示例  |
