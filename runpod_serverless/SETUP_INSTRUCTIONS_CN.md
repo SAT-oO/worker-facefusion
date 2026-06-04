@@ -28,14 +28,14 @@
 
 ```bash
 # 在仓库根目录执行
-docker build -t <registry>/worker-facefusion:<tag> .
-docker push <registry>/worker-facefusion:<tag>
+docker build -t <registry>/worker-facefusion:v1.0 .
+docker push <registry>/worker-facefusion:v1.0
 ```
 
 或拉取预构建镜像：
 
 ```bash
-docker pull satoo869/worker-facefusion:latest
+docker pull satoo869/worker-facefusion:v1.0
 ```
 
 首次本地构建约 **10–30 分钟**（含模型下载）。镜像层与预加载模型说明见 [MAINTENANCE_SPECIFICATION_CN.md — 镜像构建](MAINTENANCE_SPECIFICATION_CN.md#image-build)。

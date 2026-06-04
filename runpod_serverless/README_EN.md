@@ -27,14 +27,14 @@ Container command: `python3 -u runpod_serverless/handler.py` (see repo root `Doc
 Models are baked at image build time so cold starts do not download weights on first request.
 
 ```bash
-docker build -t <registry>/worker-facefusion:<tag> .
-docker push <registry>/worker-facefusion:<tag>
+docker build -t <registry>/worker-facefusion:v1.0 .
+docker push <registry>/worker-facefusion:v1.0
 ```
 
 You can also fetch the pre-built docker image below:
 
 ```bash
-docker pull satoo869/worker-facefusion:latest
+docker pull satoo869/worker-facefusion:v1.0
 ```
 
 The build:
