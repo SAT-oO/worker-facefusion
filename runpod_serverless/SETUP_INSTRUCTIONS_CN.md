@@ -1,4 +1,4 @@
-# RunPod Serverless — 搭建与集成说明
+# RunPod Serverless — 维护与搭建说明
 
 > 黑盒调用步骤见 [README.md](README.md)。技术规格、响应结构、运维与性能调优见 [MAINTENANCE_SPECIFICATION_CN.md](MAINTENANCE_SPECIFICATION_CN.md)。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
 

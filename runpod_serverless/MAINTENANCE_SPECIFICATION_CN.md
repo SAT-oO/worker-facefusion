@@ -1,4 +1,4 @@
-# RunPod Serverless — 技术规格与运维手册
+# RunPod Serverless — 技术规格与运维说明
 
 > 黑盒调用见 [README.md](README.md)。搭建与集成见 [SETUP_INSTRUCTIONS_CN.md](SETUP_INSTRUCTIONS_CN.md)。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
 
@@ -23,8 +23,6 @@ Worker 通过 RunPod API 接收换脸任务，在 GPU 上执行 `facefusion.py h
 Handler 通过 `_REPO_ROOT` 定位仓库根目录下的 `facefusion.py` 与 `.assets/models/`（容器内 `WORKDIR` 为 `/app`）。
 
 ---
-
-
 
 ## Runpod Serverless FlashBoot
 
@@ -53,8 +51,6 @@ Handler 通过 `_REPO_ROOT` 定位仓库根目录下的 `facefusion.py` 与 `.as
 
 
 ---
-
-
 
 ## API 响应结构
 
@@ -132,8 +128,6 @@ RunPod 任务状态对象另提供 `delayTime`、`executionTime`（毫秒），�
 
 ---
 
-
-
 ## R2 URL 与存储
 
 Handler 下载目标素材：
@@ -150,8 +144,6 @@ Handler 下载目标素材：
 **输出桶：** `target_url` 能解析出桶则输出到该桶，否则 `R2_BUCKET`。对象键恒为 `outputs/{uuid}.{output_format}`。
 
 ---
-
-
 
 ## 模型性能调试参数
 
@@ -244,11 +236,9 @@ FaceFusion CLI 参数经 `extra_args` 原样透传。应用可将画质/延迟�
 | `AGENT_DEBUG_LOG_PATH` | Agent 调试 NDJSON 额外路径 |
 
 
-容器启动时，`handler.py` 打印 Python/依赖版本、ONNX Runtime providers，以及哪些 `R2_*` 已设置（不打印值）。
+容器启动时，`handler.py` 打印 Python/依赖版本、ONNX Runtime providers，以及哪些 `R2_`* 已设置（不打印值）。
 
 ---
-
-
 
 ## 镜像构建
 
