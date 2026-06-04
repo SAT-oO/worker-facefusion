@@ -6,7 +6,7 @@ Benchmark harness for the FaceFusion serverless worker. Submits jobs to a live R
 Prerequisites
 -------------
 
-- A deployed RunPod serverless endpoint (image + `R2_*` env vars). See [RUNPOD_SERVERLESS.md](../../RUNPOD_SERVERLESS.md) for worker setup.
+- A deployed RunPod serverless endpoint (image + `R2_*` env vars). See [README.md](../../README.md) for setup; [TECHNICAL_SPECIFICATION_CN.md](../../TECHNICAL_SPECIFICATION_CN.md) for timeouts and profiles.
 - `RUNPOD_API_KEY` and the endpoint ID.
 - Target videos on R2 (or any URL the worker can download) — typically 60s / 120s / 300s clips for your SLA range.
 
