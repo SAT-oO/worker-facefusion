@@ -1,6 +1,6 @@
 # RunPod Serverless — Integration Guide
 
-> Simplified Chinese: [README.md](README.md) (integration) · [TECHNICAL_SPECIFICATION_CN.md](TECHNICAL_SPECIFICATION_CN.md) (full spec & ops).
+> Simplified Chinese: [README.md](README.md) (black-box) · [SETUP_INSTRUCTIONS_CN.md](SETUP_INSTRUCTIONS_CN.md) (setup) · [MAINTENANCE_SPECIFICATION_CN.md](MAINTENANCE_SPECIFICATION_CN.md) (spec & ops).
 
 This document is the technical specification for internal teams wiring an existing application to the FaceFusion RunPod serverless worker in this repository.
 

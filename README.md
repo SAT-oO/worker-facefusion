@@ -66,7 +66,7 @@ RunPod Serverless
 
 This fork ships a RunPod serverless worker in [`runpod_serverless/`](runpod_serverless/) that runs `facefusion.py headless-run` for face swap jobs and uploads the result to Cloudflare R2.
 
-**RunPod Serverless (简体中文):** **[runpod_serverless/README.md](runpod_serverless/README.md)** — setup & integration. **[TECHNICAL_SPECIFICATION_CN.md](runpod_serverless/TECHNICAL_SPECIFICATION_CN.md)** — API spec, ops, tuning. English: [RUNPOD_SERVERLESS.md](runpod_serverless/RUNPOD_SERVERLESS.md).
+**RunPod Serverless (简体中文):** **[runpod_serverless/README.md](runpod_serverless/README.md)** — black-box usage. **[SETUP_INSTRUCTIONS_CN.md](runpod_serverless/SETUP_INSTRUCTIONS_CN.md)** — deploy & integrate. **[MAINTENANCE_SPECIFICATION_CN.md](runpod_serverless/MAINTENANCE_SPECIFICATION_CN.md)** — spec & ops. English: [RUNPOD_SERVERLESS.md](runpod_serverless/RUNPOD_SERVERLESS.md).
 
 Quick start:
 

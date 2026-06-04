@@ -8,7 +8,7 @@ RunPod 基准测试
 前置条件
 --------
 
-- 已部署 RunPod Serverless 端点（镜像 + `R2_*` 环境变量）。部署见 [README.md](../../README.md)；超时与配置档见 [MAINTENANCE_SPECIFICATION_CN.md](../../MAINTENANCE_SPECIFICATION_CN.md)。
+- 已部署 RunPod Serverless 端点（镜像 + `R2_*` 环境变量）。部署见 [SETUP_INSTRUCTIONS_CN.md](../../SETUP_INSTRUCTIONS_CN.md)；超时与配置档见 [MAINTENANCE_SPECIFICATION_CN.md](../../MAINTENANCE_SPECIFICATION_CN.md)。
 - `RUNPOD_API_KEY` 与端点 ID（`ENDPOINT_ID`）。
 - 目标视频已放在 R2（或 Worker 可下载的任意 URL）——通常使用 60s / 120s / 300s 片段以覆盖 SLA 区间。
 

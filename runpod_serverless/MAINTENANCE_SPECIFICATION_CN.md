@@ -1,6 +1,6 @@
 # RunPod Serverless — 技术规格与运维手册
 
-> 集成与快速上手见 [README.md](README.md)。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
+> 黑盒调用见 [README.md](README.md)。搭建与集成见 [SETUP_INSTRUCTIONS_CN.md](SETUP_INSTRUCTIONS_CN.md)。English: [RUNPOD_SERVERLESS.md](RUNPOD_SERVERLESS.md)。
 
 本文档描述 Worker 行为契约、存储约定、性能调优、环境变量、超时策略及日常运维，供维护者与深度集成方查阅。
 
