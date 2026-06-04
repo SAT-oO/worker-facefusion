@@ -1,73 +1,75 @@
-RunPod Benchmark
-================
+RunPod 基准测试
+===============
 
-Benchmark harness for the FaceFusion serverless worker. Submits jobs to a live RunPod endpoint, polls until completion, and writes latency records to `results/`.
+面向 FaceFusion Serverless Worker 的基准测试脚本：向线上 RunPod 端点提交任务、轮询直至完成，并将延迟数据写入 `results/`。
 
-Prerequisites
--------------
+> 简体中文。English: [README_EN.md](README_EN.md)。
 
-- A deployed RunPod serverless endpoint (image + `R2_*` env vars). See [RUNPOD_SERVERLESS.md](../../RUNPOD_SERVERLESS.md) for worker setup.
-- `RUNPOD_API_KEY` and the endpoint ID.
-- Target videos on R2 (or any URL the worker can download) — typically 60s / 120s / 300s clips for your SLA range.
+前置条件
+--------
 
-One-time setup
---------------
+- 已部署 RunPod Serverless 端点（镜像 + `R2_*` 环境变量）。部署见 [README.md](../../README.md)；超时与配置档见 [MAINTENANCE_SPECIFICATION_CN.md](../../MAINTENANCE_SPECIFICATION_CN.md)。
+- `RUNPOD_API_KEY` 与端点 ID（`ENDPOINT_ID`）。
+- 目标视频已放在 R2（或 Worker 可下载的任意 URL）——通常使用 60s / 120s / 300s 片段以覆盖 SLA 区间。
+
+一次性配置
+----------
 
 ```bash
-# Source face fixture (base64) used in every job
+# 每个任务共用的源人脸固件（Base64）
 bash runpod_serverless/tests/fetch_fixtures.sh
 
-# Local config (gitignored if you copy from example)
+# 本地配置（从 example 复制后通常不提交 git）
 cp runpod_serverless/tests/benchmark/config.example.json runpod_serverless/tests/benchmark/config.json
 ```
 
-Edit `config.json`:
+编辑 `config.json`：
 
-| Field | What to set |
+| 字段 | 填写说明 |
 | --- | --- |
-| `endpoint_id` | RunPod serverless endpoint ID, or `${ENDPOINT_ID}` and export `ENDPOINT_ID` |
-| `targets` | HTTPS URLs for each clip key (`60s`, `120s`, `300s`) |
-| `fixtures.default_target_key` | Default `--target` when omitted (e.g. `120s`) |
+| `endpoint_id` | RunPod Serverless 端点 ID，或写 `${ENDPOINT_ID}` 并 `export ENDPOINT_ID` |
+| `targets` | 各片段键（`60s`、`120s`、`300s`）对应的 HTTPS URL |
+| `fixtures.default_target_key` | 省略 `--target` 时的默认键（如 `120s`） |
 
-Target URLs via environment (referenced in config as `${BENCHMARK_TARGET_120S_URL}` etc.):
+也可通过环境变量提供目标 URL（在配置中用 `${BENCHMARK_TARGET_120S_URL}` 等形式引用）：
 
 ```bash
 export RUNPOD_API_KEY=...
-export ENDPOINT_ID=...   # if using ${ENDPOINT_ID} in config
+export ENDPOINT_ID=...   # 若 config 中使用 ${ENDPOINT_ID}
 export BENCHMARK_TARGET_120S_URL="https://your-bucket.../target_120s.mp4"
 export BENCHMARK_TARGET_300S_URL="https://your-bucket.../target_300s.mp4"
 ```
 
-Run
----
+运行
+----
 
-From the repo root:
+在仓库根目录执行：
 
 ```bash
-# Cold start: scale-down gap between jobs (default 90s idle, 10 iterations)
+# 冷启动：任务间留缩容间隔（默认任务间隔空闲 90s，共 10 次）
 python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario cold_flashboot \
   --profile fast_nvenc \
   --target 120s
 
-# Warm: back-to-back jobs (no idle wait)
+# 热机：连续提交（任务间不等待）
 python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario warm \
   --profile fast_nvenc \
   --target 120s
 
-# Concurrent burst (default concurrency from config, often 4)
+# 并发突发（并发数由 config 决定，常为 4）
 python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --scenario concurrent \
   --profile fast_nvenc \
   --target 120s
 
-# Compare profiles on the same fixture
+# 同一测试素材下对比不同配置档
 python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --profile baseline_e2e --target 120s
 python3 runpod_serverless/tests/benchmark/run_benchmark.py --scenario warm --profile fast_nvenc --target 120s
 ```
 
-Useful overrides:
+常用参数覆盖：
 
 ```bash
 python3 runpod_serverless/tests/benchmark/run_benchmark.py \
@@ -78,76 +80,76 @@ python3 runpod_serverless/tests/benchmark/run_benchmark.py \
   --concurrency 2
 ```
 
-| Flag | Purpose |
+| 参数 | 含义 |
 | --- | --- |
-| `--config` | Path to config JSON (default: `config.json` in this directory) |
-| `--scenario` | `cold_flashboot`, `warm`, or `concurrent` |
-| `--profile` | Name from `config.profiles` (e.g. `fast_nvenc`) |
-| `--target` | Key from `config.targets` (e.g. `120s`) |
-| `--target-url` | Override target URL (skips `config.targets`) |
-| `--iterations` | Override scenario iteration count |
-| `--concurrency` | Parallel jobs per batch |
-| `--wait-after-job` | Seconds to sleep between batches (cold scenario) |
-| `--output` | Custom JSONL path |
+| `--config` | 配置文件路径（默认本目录 `config.json`） |
+| `--scenario` | 场景：`cold_flashboot`、`warm`、`concurrent` |
+| `--profile` | `config.profiles` 中的名称（如 `fast_nvenc`） |
+| `--target` | `config.targets` 中的键（如 `120s`） |
+| `--target-url` | 覆盖目标视频 URL（不使用 `config.targets`） |
+| `--iterations` | 覆盖场景中的运行次数 |
+| `--concurrency` | 每批并行任务数 |
+| `--wait-after-job` | 批次之间的休眠秒数（冷启动场景） |
+| `--output` | 自定义 JSONL 输出路径 |
 
-Scenarios (in `config.json` → `scenarios`)
--------------------------------------------
+场景（`config.json` → `scenarios`）
+-----------------------------------
 
-| Scenario | Default behavior |
+| 场景 | 默认行为 |
 | --- | --- |
-| `cold_flashboot` | 10 jobs, 90s wait between jobs, concurrency 1 |
-| `warm` | 20 jobs, no wait, concurrency 1 |
-| `concurrent` | 1 batch with concurrency 4 |
+| `cold_flashboot` | 10 次任务，任务间隔等待 90s，并发 1 |
+| `warm` | 20 次任务，无间隔，并发 1 |
+| `concurrent` | 1 批，并发 4 |
 
-Profiles (in `config.json` → `profiles`)
-----------------------------------------
+配置档（`config.json` → `profiles`）
+----------------------------------
 
-| Profile | Purpose |
+| 配置档 | 说明 |
 | --- | --- |
-| `baseline_e2e` | Quality-first: libx264 veryslow, 512×512 pixel boost |
-| `fast_nvenc` | Latency-oriented: CUDA, NVENC, 256×256 boost, 4 threads |
-| `fast_nvenc_threads8` | Same as `fast_nvenc` with 8 threads |
-| `sla_45s` | Aggressive SLA preset (see `extra_args` in config) |
+| `baseline_e2e` | 画质优先：`libx264`、`veryslow`、512×512 pixel boost |
+| `fast_nvenc` | 延迟优先：CUDA、NVENC、256×256 boost、4 线程 |
+| `fast_nvenc_threads8` | 同 `fast_nvenc`，8 执行线程 |
+| `sla_45s` | 激进 SLA 预设（见 config 中 `extra_args`） |
 
-Results
--------
+结果
+----
 
-Each run writes:
+每次运行生成：
 
-- `results/<timestamp>_<scenario>_<profile>.jsonl` — one JSON object per job
-- `results/<timestamp>_<scenario>_<profile>.summary.json` — p50/p90/p99 for `delayTime`, `executionTime`, and client `total_time_ms`
+- `results/<timestamp>_<scenario>_<profile>.jsonl` — 每个任务一行 JSON
+- `results/<timestamp>_<scenario>_<profile>.summary.json` — `delayTime`、`executionTime` 及客户端 `total_time_ms` 的 p50/p90/p99
 
-Analyze across runs:
+汇总多次运行：
 
 ```bash
 python3 runpod_serverless/tests/benchmark/analyze_results.py runpod_serverless/tests/benchmark/results/*.jsonl
 ```
 
-Recorded fields (per job):
+每条任务记录字段：
 
-| Field | Source |
+| 字段 | 来源 |
 | --- | --- |
-| `delay_time_ms` | RunPod status (`delayTime`) |
-| `execution_time_ms` | RunPod status (`executionTime`) |
-| `total_time_ms` | Client submit → completed |
-| `handler_timings` | Handler `timings` (decode, download, facefusion, upload) |
-| `output_url` | Handler output when successful |
+| `delay_time_ms` | RunPod 任务状态（`delayTime`，排队 + 冷启动） |
+| `execution_time_ms` | RunPod 任务状态（`executionTime`，Handler 执行时间） |
+| `total_time_ms` | 客户端从提交到完成的墙钟时间 |
+| `handler_timings` | Handler 返回的 `timings`（解码、下载、facefusion、上传） |
+| `output_url` | 成功时的输出 URL |
 
-Timeouts
---------
+超时
+----
 
-| Setting | Location | Default |
+| 配置项 | 位置 | 默认值 |
 | --- | --- | --- |
-| `policy.executionTimeout` | `config.json` → `base_input.policy` | 360000 ms (6 min) |
-| `job_timeout_seconds` | `config.json` → `runpod` | 1800 s (client poll limit) |
-| Endpoint execution timeout | RunPod console | **360 s** (6 min) |
+| `policy.executionTimeout` | `config.json` → `base_input.policy` | 360000 ms（6 分钟） |
+| `job_timeout_seconds` | `config.json` → `runpod` | 1800 s（客户端轮询上限） |
+| 端点执行超时 | RunPod 控制台 | **360 s**（6 分钟） |
 
-If `execution_time_ms` is only a few seconds, the job failed early (bad `extra_args`, missing R2 env, bad target URL). Check `error` and `stderr_tail` in the JSONL line — not a timeout.
+若 `execution_time_ms` 只有数秒，通常是任务提前失败（`extra_args` 错误、缺少 R2 环境变量、`target_url` 无效等），**不是**超时。请查看 JSONL 中的 `error` 与 `stderr_tail`。
 
-Suggested order
----------------
+建议运行顺序
+------------
 
-1. `warm` + `120s` — compare `baseline_e2e` vs `fast_nvenc` (compute/encode only).
-2. `cold_flashboot` + `120s` + `fast_nvenc` — cold-start + idle gap between jobs.
-3. `warm` + `300s` — longer clip stability.
-4. `concurrent` — queue depth and multi-job behavior.
+1. `warm` + `120s` — 对比 `baseline_e2e` 与 `fast_nvenc`（纯算力/编码）。
+2. `cold_flashboot` + `120s` + `fast_nvenc` — 冷启动与任务间缩容间隔。
+3. `warm` + `300s` — 较长片段稳定性。
+4. `concurrent` — 队列深度与多任务并发行为。
