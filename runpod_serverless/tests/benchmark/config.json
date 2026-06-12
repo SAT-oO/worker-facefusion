@@ -1,0 +1,94 @@
+{
+  "endpoint_id": "${ENDPOINT_ID}",
+  "fixtures": {
+    "source_b64_path": "../fixtures/source.b64",
+    "source_image_format": "jpg",
+    "default_target_key": "120s"
+  },
+  "targets": {
+    "60s": "${BENCHMARK_TARGET_60S_URL}",
+    "120s": "${BENCHMARK_TARGET_120S_URL}",
+    "300s": "${BENCHMARK_TARGET_300S_URL}"
+  },
+  "runpod": {
+    "idle_wait_seconds": 90,
+    "poll_interval_seconds": 2,
+    "job_timeout_seconds": 1800,
+    "flashboot_cold_threshold_ms": 30000
+  },
+  "base_input": {
+    "output_format": "mp4",
+    "processors": ["face_swapper"],
+    "face_swapper_model": "inswapper_128_fp16",
+    "policy": {
+      "executionTimeout": 360000,
+      "ttl": 3600000,
+      "lowPriority": false
+    }
+  },
+  "profiles": [
+    {
+      "name": "baseline_e2e",
+      "description": "Quality-first CPU encode at source resolution",
+      "extra_args": [
+        "--face-swapper-pixel-boost", "256x256",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "libx264",
+        "--output-video-preset", "fast",
+        "--output-video-quality", "85",
+        "--temp-frame-format", "png"
+      ]
+    },
+    {
+      "name": "fast_nvenc",
+      "description": "NVENC at source resolution with 8 execution threads",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "256x256",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "h264_nvenc",
+        "--output-video-preset", "fast",
+        "--output-video-quality", "80",
+        "--temp-frame-format", "png"
+      ]
+    },
+    {
+      "name": "production",
+      "description": "Production defaults (submit_job.py / quality_tiers tier 1)",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "256x256",
+        "--output-video-scale", "1.0", 
+        "--output-video-encoder", "h264_nvenc",
+        "--output-video-preset", "fast",
+        "--output-video-quality", "85",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box"
+      ]
+    }
+  ],
+  "scenarios": {
+    "cold_flashboot": {
+      "description": "Scale-to-zero between jobs with FlashBoot enabled on the endpoint",
+      "iterations": 10,
+      "wait_after_job_seconds": 90,
+      "concurrency": 1
+    },
+    "warm": {
+      "description": "Back-to-back jobs on a warm worker (no idle wait)",
+      "iterations": 20,
+      "wait_after_job_seconds": 0,
+      "concurrency": 1
+    },
+    "concurrent": {
+      "description": "Burst load to measure queue depth and throughput",
+      "iterations": 1,
+      "wait_after_job_seconds": 0,
+      "concurrency": 4
+    }
+  }
+}

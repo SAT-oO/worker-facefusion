@@ -1,0 +1,127 @@
+{
+  "description": "Face-swap quality presets for RunPod jobs, ordered by ascending compute time. Tier 1 is the full source-matched video baseline; higher tiers add face detail or encode fidelity.",
+  "usage": "Copy a tier into your job body (see submit_job.py default_body). Benchmark one tier at a time on a fixed target clip to measure facefusion_ms in handler timings.",
+  "base_input": {
+    "processors": ["face_swapper"],
+    "face_swapper_model": "inswapper_128_fp16",
+    "output_format": "mp4",
+    "policy": {
+      "executionTimeout": 360000,
+      "ttl": 3600000,
+      "lowPriority": false
+    }
+  },
+  "tiers": [
+    {
+      "rank": 1,
+      "name": "production",
+      "benchmark_profile": "production",
+      "compute_time": "lowest",
+      "description": "Full source-matched video baseline: 128×128 pixel boost, NVENC medium, box + occlusion masks. Default production configuration.",
+      "changes_from_previous": null,
+      "face_swapper_model": "inswapper_128_fp16",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "128x128",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "h264_nvenc",
+        "--output-video-preset", "medium",
+        "--output-video-quality", "85",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box", "occlusion"
+      ]
+    },
+    {
+      "rank": 2,
+      "name": "balanced_nvenc",
+      "benchmark_profile": "fast_nvenc",
+      "compute_time": "low",
+      "description": "256×256 pixel boost with faster NVENC encode (benchmark profile fast_nvenc).",
+      "changes_from_previous": "face-swapper-pixel-boost 128x128→256x256; output-video-preset medium→fast; output-video-quality 85→80",
+      "face_swapper_model": "inswapper_128_fp16",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "256x256",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "h264_nvenc",
+        "--output-video-preset", "fast",
+        "--output-video-quality", "80",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box", "occlusion"
+      ]
+    },
+    {
+      "rank": 3,
+      "name": "high_detail_nvenc",
+      "compute_time": "medium",
+      "description": "512×512 pixel boost for sharper faces; largest GPU step before CPU encode.",
+      "changes_from_previous": "face-swapper-pixel-boost 256x256→512x512",
+      "face_swapper_model": "inswapper_128_fp16",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "512x512",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "h264_nvenc",
+        "--output-video-preset", "fast",
+        "--output-video-quality", "85",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box", "occlusion"
+      ]
+    },
+    {
+      "rank": 4,
+      "name": "quality_libx264",
+      "benchmark_profile": "baseline_e2e",
+      "compute_time": "high",
+      "description": "Quality-first encode: libx264 veryslow at high CRF-quality (benchmark profile baseline_e2e).",
+      "changes_from_previous": "output-video-encoder h264_nvenc→libx264; preset fast→veryslow; quality 85→95",
+      "face_swapper_model": "inswapper_128_fp16",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "512x512",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "libx264",
+        "--output-video-preset", "veryslow",
+        "--output-video-quality", "95",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box", "occlusion"
+      ]
+    },
+    {
+      "rank": 5,
+      "name": "quality_fp32_model",
+      "compute_time": "highest",
+      "description": "FP32 inswapper weights; marginal visual gain over fp16, slower inference. Requires inswapper_128.onnx in the worker image.",
+      "changes_from_previous": "face_swapper_model inswapper_128_fp16→inswapper_128",
+      "face_swapper_model": "inswapper_128",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-swapper-pixel-boost", "512x512",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "libx264",
+        "--output-video-preset", "veryslow",
+        "--output-video-quality", "95",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box", "occlusion"
+      ]
+    }
+  ],
+  "notes": [
+    "Tier 1 (production) is the minimum preset: source-matched resolution/fps (output-video-scale 1.0, no output-video-fps cap).",
+    "All tiers use temp-frame-format png to avoid lossy intermediate frames.",
+    "Tiers are ordered by expected compute time on a fixed clip; actual ranking depends on GPU, clip length, and resolution.",
+    "All tiers use execution-thread-count 8.",
+    "Change one tier at a time when benchmarking; tiers 3–5 may exceed the 360s RunPod execution timeout on long clips.",
+    "For sharper results beyond tier 4, add processors (e.g. frame_enhancer) — not covered here."
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "input": {
+    "source_image_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+    "source_image_format": "png",
+    "target_url": "http://minio:9000/ff-test/templates/target-240p.mp4",
+    "output_format": "mp4",
+    "processors": ["face_swapper"],
+    "face_swapper_model": "inswapper_128_fp16",
+    "extra_args": [
+      "--face-swapper-pixel-boost", "512x512",
+      "--output-video-scale", "1.0",
+      "--output-video-encoder", "libx264",
+      "--output-video-preset", "veryslow",
+      "--output-video-quality", "95",
+      "--temp-frame-format", "png"
+    ]
+  },
+  "policy": {
+    "executionTimeout": 360000,
+    "ttl": 3600000,
+    "lowPriority": false
+  }
+}

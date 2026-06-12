@@ -1,0 +1,9 @@
+numpy==2.2.1
+onnx==1.21.0
+opencv-python==4.13.0.92
+tqdm==4.67.3
+scipy==1.17.1
+
+runpod
+requests
+boto3
