@@ -68,8 +68,8 @@ This fork ships a RunPod serverless worker in [`runpod_serverless/`](runpod_serv
 Quick start:
 
 ```bash
-docker build -t <registry>/worker-facefusion:v1.0 .
-docker push <registry>/worker-facefusion:v1.0
+docker build -t <registry>/worker-facefusion:<tag> .
+docker push <registry>/worker-facefusion:<tag>
 ```
 
 Create a RunPod serverless endpoint from that image, set the `R2_*` variables in the docs above, and submit jobs via `POST https://api.runpod.ai/v2/{endpoint_id}/run`. For local testing: `python runpod_serverless/handler.py` with [`runpod_serverless/test_input.json`](runpod_serverless/test_input.json), or `bash runpod_serverless/tests/run_e2e.sh` for a full GPU stack.
