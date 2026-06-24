@@ -10,6 +10,7 @@ from facefusion.face_helper import apply_nms, convert_to_face_landmark_5, estima
 from facefusion.face_landmarker import detect_face_landmark, estimate_face_landmark_68_5
 from facefusion.face_recognizer import calculate_face_embedding
 from facefusion.face_store import get_static_faces, set_static_faces
+from facefusion import logger
 from facefusion.types import BoundingBox, Face, FaceLandmark5, FaceLandmarkSet, FaceScoreSet, Score, VisionFrame
 
 
@@ -115,12 +116,26 @@ def get_many_faces(vision_frames : List[VisionFrame]) -> List[Face]:
 					all_face_scores.extend(face_scores)
 					all_face_landmarks_5.extend(face_landmarks_5)
 
-				if all_bounding_boxes and all_face_scores and all_face_landmarks_5 and state_manager.get_item('face_detector_score') > 0:
+				face_detector_score = state_manager.get_item('face_detector_score')
+				if all_bounding_boxes and all_face_scores and all_face_landmarks_5 and face_detector_score > 0:
 					faces = create_faces(vision_frame, all_bounding_boxes, all_face_scores, all_face_landmarks_5)
 
 					if faces:
 						many_faces.extend(faces)
 						set_static_faces(vision_frame, faces)
+					else:
+						logger.debug(
+							'face detection produced boxes but no faces passed filtering '
+							f'(raw_boxes={len(all_bounding_boxes)} detector_score_threshold={face_detector_score})',
+							__name__
+						)
+				else:
+					logger.debug(
+						'no faces detected '
+						f'(raw_boxes={len(all_bounding_boxes)} detector_score_threshold={face_detector_score} '
+						f'frame_shape={vision_frame.shape if vision_frame is not None else None})',
+						__name__
+					)
 	return many_faces
 
 

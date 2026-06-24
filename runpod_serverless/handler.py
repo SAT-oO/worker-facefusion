@@ -19,13 +19,33 @@ import runpod
 _RUNPOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_RUNPOD_DIR)
 _LOGGER_NAME = "runpod_worker"
+TRACE_LEVEL = 5
+
+_LOG_LEVEL_MAP = {
+    "TRACE": TRACE_LEVEL,
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARN": logging.WARNING,
+    "ERROR": logging.ERROR,
+}
 
 
 def _models_dir():
     return os.path.join(_REPO_ROOT, ".assets", "models")
 
 
-def _setup_logger(log_level: int = logging.INFO) -> logging.Logger:
+def _resolve_worker_log_level() -> int:
+    configured = os.environ.get("WORKER_LOG_LEVEL", "INFO").strip().upper()
+    if configured == "WARNING":
+        configured = "WARN"
+    return _LOG_LEVEL_MAP.get(configured, logging.INFO)
+
+
+def _setup_logger(log_level: int | None = None) -> logging.Logger:
+    if log_level is None:
+        log_level = _resolve_worker_log_level()
+    logging.addLevelName(TRACE_LEVEL, "TRACE")
+    logging.addLevelName(logging.WARNING, "WARN")
     log_format = logging.Formatter(
         "%(asctime)s - %(levelname)s - [Request: %(request_id)s] - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
@@ -55,6 +75,40 @@ def _log_debug_event(
 ) -> None:
     payload = json.dumps(data or {}, default=str, ensure_ascii=False)
     job_logger.log(level, "%s | %s | data=%s", location, message, payload)
+
+
+def _summarize_input_payload(payload: dict | None) -> dict:
+    summary = dict(payload or {})
+    source_b64 = summary.get("source_image_base64")
+    if isinstance(source_b64, str):
+        summary["source_image_base64"] = f"<redacted len={len(source_b64)}>"
+    return summary
+
+
+def _log_job_state(
+    job_logger: logging.LoggerAdapter,
+    state: str,
+    **fields: object,
+) -> None:
+    if fields:
+        detail = " | ".join(f"{key}={value}" for key, value in fields.items())
+        job_logger.info("Job state=%s | %s", state, detail)
+        return
+    job_logger.info("Job state=%s", state)
+
+
+def _broadcast_error_context(
+    job_logger: logging.LoggerAdapter,
+    location: str,
+    message: str,
+    input_payload: dict | None,
+    *,
+    extra: dict | None = None,
+) -> None:
+    data = {"input": _summarize_input_payload(input_payload)}
+    if extra:
+        data.update(extra)
+    _log_debug_event(job_logger, TRACE_LEVEL, location, message, data)
 
 
 logger = logging.LoggerAdapter(_setup_logger(), {"request_id": "startup"})
@@ -136,10 +190,22 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
     if NVENC_AVAILABLE:
         return extra_args
     if any(str(arg) in _NVENC_ENCODER_FALLBACKS for arg in extra_args):
-        job_logger.info("nvenc marked unavailable; re-probing before applying fallback")
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:nvenc-fallback",
+            "nvenc marked unavailable; re-probing before applying fallback",
+            {},
+        )
         if _probe_nvenc():
             NVENC_AVAILABLE = True
-            job_logger.info("nvenc re-probe: OK; keeping NVENC encoder")
+            _log_debug_event(
+                job_logger,
+                TRACE_LEVEL,
+                "handler.py:nvenc-fallback",
+                "nvenc re-probe OK; keeping NVENC encoder",
+                {},
+            )
             return extra_args
     patched = []
     replacements = []
@@ -286,6 +352,50 @@ def _snapshot_gpu_memory():
     return None
 
 
+def _diagnose_source_image(source_path: str) -> dict:
+    result = {
+        "source_path": os.path.basename(source_path),
+        "file_exists": os.path.isfile(source_path),
+    }
+    if not result["file_exists"]:
+        result["error"] = "source file missing on disk"
+        return result
+    try:
+        import cv2
+
+        file_size = os.path.getsize(source_path)
+        result["file_size_bytes"] = file_size
+        if file_size == 0:
+            result["error"] = "source file is empty"
+            return result
+
+        image = cv2.imread(source_path)
+        if image is None:
+            result["error"] = "cv2.imread returned None (corrupt or unsupported format)"
+            return result
+
+        height, width = image.shape[:2]
+        result["width"] = width
+        result["height"] = height
+        result["channels"] = image.shape[2] if len(image.shape) > 2 else 1
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        result["mean_brightness"] = round(float(gray.mean()), 2)
+        result["laplacian_variance"] = round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2)
+
+        min_dim = min(width, height)
+        if min_dim < 64:
+            result["quality_hint"] = "image very small for reliable face detection (<64px short side)"
+        elif result["laplacian_variance"] < 50:
+            result["quality_hint"] = "low sharpness may reduce detection (laplacian_variance < 50)"
+        elif result["mean_brightness"] < 25:
+            result["quality_hint"] = "image very dark; detection may fail"
+        elif result["mean_brightness"] > 230:
+            result["quality_hint"] = "image very bright/overexposed; detection may fail"
+    except Exception as exc:
+        result["diagnostic_error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
 def _diagnose_yolo_model_load():
     model_path = os.path.join(_models_dir(), "yoloface_8n.onnx")
     result = {
@@ -336,9 +446,11 @@ def _log_job_completion(
     job_logger: logging.LoggerAdapter,
     status: str,
     timings: dict,
+    input_payload: dict | None = None,
     *,
     error: str | None = None,
     output_url: str | None = None,
+    extra: dict | None = None,
 ) -> None:
     summary = {
         "status": status,
@@ -346,41 +458,62 @@ def _log_job_completion(
         "error": error,
         "output_url": output_url,
     }
-    message = "Job finished | status=%s | handler_total_ms=%s"
-    args: list = [status, timings.get("handler_total_ms")]
+    if extra:
+        summary.update(extra)
     if status == "COMPLETED":
-        job_logger.info(message, *args)
-        if output_url:
-            job_logger.info("Job output_url=%s", output_url)
+        _log_job_state(
+            job_logger,
+            status,
+            handler_total_ms=timings.get("handler_total_ms"),
+            output_url=output_url,
+        )
     else:
-        job_logger.error(message, *args)
-        if error:
-            job_logger.error("Job error: %s", error)
-    job_logger.debug("Job completion detail: %s", json.dumps(summary, default=str))
+        _log_job_state(
+            job_logger,
+            "FAILED",
+            handler_total_ms=timings.get("handler_total_ms"),
+            error=error,
+        )
+        _broadcast_error_context(
+            job_logger,
+            "handler.py:job-completion",
+            "failed job context",
+            input_payload,
+            extra=summary,
+        )
 
 
 def handler(event):
     job_id = event.get("id", "unknown")
     job_logger = _job_logger(job_id)
-    job_logger.info("Job received")
+    _log_job_state(job_logger, "RECEIVED")
 
     tmpdir = tempfile.mkdtemp(prefix="ff_")
     handler_started = time()
     timings: dict = {}
+    payload: dict = {}
+    source_path = ""
     try:
         payload = event.get("input") or {}
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:job-input",
+            "received input payload",
+            {"input": _summarize_input_payload(payload)},
+        )
 
         src_b64 = payload.get("source_image_base64")
         target_url = payload.get("target_url")
         if not src_b64:
             timings["handler_total_ms"] = _elapsed_ms(handler_started)
             result = {"error": "source_image_base64 is required", "timings": timings}
-            _log_job_completion(job_logger, "FAILED", timings, error=result["error"])
+            _log_job_completion(job_logger, "FAILED", timings, payload, error=result["error"])
             return result
         if not target_url:
             timings["handler_total_ms"] = _elapsed_ms(handler_started)
             result = {"error": "target_url is required", "timings": timings}
-            _log_job_completion(job_logger, "FAILED", timings, error=result["error"])
+            _log_job_completion(job_logger, "FAILED", timings, payload, error=result["error"])
             return result
 
         src_fmt = (payload.get("source_image_format") or "png").lower().lstrip(".")
@@ -395,12 +528,18 @@ def handler(event):
         }
         extra_args = patched_args
 
-        job_logger.info(
-            "Job submitted | processors=%s face_swapper_model=%s output_format=%s extra_args_count=%s",
-            processors,
-            face_swapper_model,
-            output_format,
-            len(extra_args),
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:job-config",
+            "resolved job configuration",
+            {
+                "processors": processors,
+                "face_swapper_model": face_swapper_model,
+                "output_format": output_format,
+                "extra_args": extra_args,
+                "encoder": encoder_info,
+            },
         )
 
         phase_started = time()
@@ -414,10 +553,16 @@ def handler(event):
         phase_started = time()
         _download_target(target_url, target_path)
         timings["download_target_ms"] = _elapsed_ms(phase_started)
-        job_logger.info(
-            "Target ready | download_target_ms=%s target_path=%s",
-            timings["download_target_ms"],
-            os.path.basename(target_path),
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:target-ready",
+            "target downloaded",
+            {
+                "download_target_ms": timings["download_target_ms"],
+                "target_path": os.path.basename(target_path),
+                "target_size_bytes": os.path.getsize(target_path) if os.path.isfile(target_path) else -1,
+            },
         )
 
         output_path = os.path.join(tmpdir, f"output.{output_format}")
@@ -436,36 +581,57 @@ def handler(event):
         if extra_args:
             cmd += [str(a) for a in extra_args]
 
-        job_logger.info("Starting facefusion headless-run")
+        _log_job_state(job_logger, "PROCESSING")
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:headless-run",
+            "starting facefusion subprocess",
+            {"cmd": cmd},
+        )
         phase_started = time()
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=_REPO_ROOT)
         timings["facefusion_ms"] = _elapsed_ms(phase_started)
-        job_logger.info("Facefusion finished | facefusion_ms=%s returncode=%s", timings["facefusion_ms"], proc.returncode)
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:headless-run",
+            "facefusion subprocess finished",
+            {
+                "facefusion_ms": timings["facefusion_ms"],
+                "returncode": proc.returncode,
+                "stderr_tail": _tail(proc.stderr, 1200),
+                "stdout_tail": _tail(proc.stdout, 1200),
+            },
+        )
 
         if proc.returncode != 0 or not os.path.exists(output_path):
             yolo_diagnostics = None
-            if "loading model yoloface_8n failed" in (proc.stderr or ""):
-                _log_debug_event(
-                    job_logger,
-                    logging.ERROR,
-                    "handler.py:headless-run-failure",
-                    "detected yoloface model load failure in facefusion stderr",
-                    {
-                        "returncode": proc.returncode,
-                        "stderr_tail": _tail(proc.stderr, 1200),
-                    },
-                )
+            source_diagnostics = None
+            stderr_text = proc.stderr or ""
+            if "loading model yoloface_8n failed" in stderr_text:
                 yolo_diagnostics = _diagnose_yolo_model_load()
                 _log_debug_event(
                     job_logger,
-                    logging.ERROR,
+                    TRACE_LEVEL,
                     "handler.py:yolo-diagnostics",
                     "captured local yoloface load diagnostics",
                     yolo_diagnostics,
                 )
+            if "no source face detected" in stderr_text.lower() and source_path:
+                source_diagnostics = _diagnose_source_image(source_path)
+                _log_debug_event(
+                    job_logger,
+                    TRACE_LEVEL,
+                    "handler.py:source-face-diagnostics",
+                    "source image diagnostics for face detection failure",
+                    source_diagnostics,
+                )
             diagnostics = {}
             if yolo_diagnostics:
                 diagnostics["yolo_model_load"] = yolo_diagnostics
+            if source_diagnostics:
+                diagnostics["source_image"] = source_diagnostics
             timings["handler_total_ms"] = _elapsed_ms(handler_started)
             result = {
                 "error": f"headless-run failed (exit {proc.returncode})",
@@ -474,16 +640,25 @@ def handler(event):
                 "diagnostics": diagnostics,
                 "timings": timings,
             }
-            if proc.stderr:
-                job_logger.error("Facefusion stderr tail: %s", _tail(proc.stderr, 1200))
-            _log_job_completion(job_logger, "FAILED", timings, error=result["error"])
+            _log_job_completion(
+                job_logger,
+                "FAILED",
+                timings,
+                payload,
+                error=result["error"],
+                extra={
+                    "returncode": proc.returncode,
+                    "stderr_tail": _tail(proc.stderr, 1200),
+                    "diagnostics": diagnostics,
+                },
+            )
             return result
 
         bucket = _resolve_bucket(target_url)
         if not bucket:
             timings["handler_total_ms"] = _elapsed_ms(handler_started)
             result = {"error": "R2 bucket not configured", "timings": timings}
-            _log_job_completion(job_logger, "FAILED", timings, error=result["error"])
+            _log_job_completion(job_logger, "FAILED", timings, payload, error=result["error"])
             return result
 
         key = f"{R2_OUTPUT_PREFIX}/{uuid.uuid4().hex}.{output_format}"
@@ -499,17 +674,23 @@ def handler(event):
             "encoder": encoder_info,
             "timings": timings,
         }
-        _log_job_completion(job_logger, "COMPLETED", timings, output_url=output_url)
+        _log_job_completion(job_logger, "COMPLETED", timings, payload, output_url=output_url)
         return result
     except Exception as exc:
         timings["handler_total_ms"] = _elapsed_ms(handler_started)
-        job_logger.error("Job failed with unexpected exception", exc_info=True)
+        _log_debug_event(
+            job_logger,
+            TRACE_LEVEL,
+            "handler.py:exception",
+            "unhandled exception",
+            {"error": str(exc), "traceback": traceback.format_exc()},
+        )
         result = {
             "error": str(exc),
             "traceback": traceback.format_exc(),
             "timings": timings,
         }
-        _log_job_completion(job_logger, "FAILED", timings, error=str(exc))
+        _log_job_completion(job_logger, "FAILED", timings, payload, error=str(exc))
         return result
     finally:
         try:

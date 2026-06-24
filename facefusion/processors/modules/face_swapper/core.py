@@ -544,6 +544,12 @@ def pre_process(mode : ProcessMode) -> bool:
 	source_faces = get_many_faces(source_vision_frames)
 
 	if not get_one_face(source_faces):
+		frame_shapes = [vision_frame.shape for vision_frame in source_vision_frames if vision_frame is not None]
+		logger.debug(
+			'source face pre-check failed '
+			f'(source_images={len(source_image_paths)} detected_faces={len(source_faces)} frame_shapes={frame_shapes})',
+			__name__
+		)
 		logger.error(translator.get('no_source_face_detected') + translator.get('exclamation_mark'), __name__)
 		return False
 
