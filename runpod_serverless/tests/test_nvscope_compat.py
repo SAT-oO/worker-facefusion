@@ -64,6 +64,21 @@ class NvscopeCompatTest(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(summary, "probe ok")
 
+    def test_probe_available_video_encoders_parses_stdout(self):
+        fake_proc = MagicMock(
+            returncode=0,
+            stdout=" V..... libx264\n V..... h264_nvenc\n",
+            stderr="",
+        )
+        with patch.object(nvscope_compat.os.path, "isfile", return_value=True):
+            with patch.object(nvscope_compat.subprocess, "run", return_value=fake_proc):
+                encoders = nvscope_compat.probe_available_video_encoders()
+        self.assertEqual(encoders, ["libx264", "h264_nvenc"])
+
+    def test_probe_available_video_encoders_missing_binary(self):
+        with patch.object(nvscope_compat.os.path, "isfile", return_value=False):
+            self.assertEqual(nvscope_compat.probe_available_video_encoders(), [])
+
     def test_describe_nvscope_status_skips_probe_when_not_installed(self):
         with patch.object(nvscope_compat, "is_nvscope_installed", return_value=False):
             with patch.object(nvscope_compat, "describe_gpu_devices", return_value="nvidia3"):

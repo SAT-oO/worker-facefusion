@@ -38,7 +38,9 @@ def _import_handler(probe_returncode: int):
 
     fake_proc = MagicMock(returncode=probe_returncode, stdout="", stderr="probe stub")
     with patch("subprocess.run", return_value=fake_proc):
-        return importlib.import_module("handler")
+        handler = importlib.import_module("handler")
+    handler.AVAILABLE_VIDEO_ENCODERS = ["libx264", "libx265", "h264_nvenc", "hevc_nvenc"]
+    return handler
 
 
 class EncoderFallbackTest(unittest.TestCase):
@@ -99,6 +101,18 @@ class EncoderFallbackTest(unittest.TestCase):
         args = ["--output-video-encoder", "h264_nvenc"]
         self.assertEqual(handler._apply_nvenc_fallback(args, job_logger), args)
         job_logger.warning.assert_not_called()
+
+    def test_probe_failure_drops_encoder_when_cpu_fallback_unavailable(self):
+        handler = _import_handler(probe_returncode=1)
+        handler.AVAILABLE_VIDEO_ENCODERS = []
+
+        job_logger = MagicMock()
+        args = ["--output-video-encoder", "h264_nvenc", "--output-video-quality", "85"]
+        with patch.object(handler, "_probe_nvenc", return_value=False):
+            patched = handler._apply_nvenc_fallback(args, job_logger)
+
+        self.assertEqual(patched, ["--output-video-quality", "85"])
+        self.assertTrue(any("dropping --output-video-encoder" in str(call) for call in job_logger.warning.call_args_list))
 
 
 if __name__ == "__main__":

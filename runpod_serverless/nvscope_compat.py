@@ -19,6 +19,11 @@ def _ffmpeg_real_path() -> str:
     return os.environ.get("FFMPEG_REAL_PATH", "/usr/bin/ffmpeg")
 
 
+def ffmpeg_real_path() -> str:
+    """System ffmpeg path, without the nvscope PATH wrapper."""
+    return _ffmpeg_real_path()
+
+
 def is_nvscope_disabled() -> bool:
     return os.environ.get("NVSCOPE_DISABLED", "0").strip() in {"1", "true", "yes"}
 
@@ -38,6 +43,31 @@ def resolve_ffmpeg_executable() -> str:
     if wrapped:
         return wrapped
     return _ffmpeg_real_path()
+
+
+def probe_available_video_encoders(timeout: int = 30) -> list[str]:
+    """List video encoders from the real ffmpeg binary (no nvscope LD_PRELOAD)."""
+    ffmpeg = _ffmpeg_real_path()
+    if not os.path.isfile(ffmpeg):
+        return []
+
+    try:
+        proc = subprocess.run(
+            [ffmpeg, "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except Exception:
+        return []
+
+    encoders: list[str] = []
+    for line in (proc.stdout or "").lower().splitlines():
+        if line.startswith(" v"):
+            parts = line.split()
+            if len(parts) >= 2:
+                encoders.append(parts[1])
+    return encoders
 
 
 def describe_gpu_devices() -> str:

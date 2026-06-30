@@ -11,6 +11,16 @@ if [ "${NVSCOPE_DISABLED:-0}" = "1" ]; then
 	exec "$REAL_FFMPEG" "$@"
 fi
 
+# FaceFusion probes encoders via `ffmpeg -encoders` when building argparse.
+# nvscope LD_PRELOAD can break that introspection path; only shim encode/decode work.
+for arg in "$@"; do
+	case "$arg" in
+		-encoders|-decoders|-codecs|-formats|-version|-hwaccels|-devices|-buildconf|-h|-help|-?)
+			exec "$REAL_FFMPEG" "$@"
+			;;
+	esac
+done
+
 if [ -x "$NVSCOPE_BIN" ] && [ -f "$NVSCOPE_LIB" ]; then
 	exec "$NVSCOPE_BIN" -- "$REAL_FFMPEG" "$@"
 fi

@@ -16,7 +16,12 @@ from botocore.client import Config
 
 import runpod
 
-from nvscope_compat import describe_nvscope_status, resolve_ffmpeg_executable
+from nvscope_compat import (
+    describe_nvscope_status,
+    ffmpeg_real_path,
+    probe_available_video_encoders,
+    resolve_ffmpeg_executable,
+)
 
 _RUNPOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_RUNPOD_DIR)
@@ -163,6 +168,11 @@ def _startup_self_check() -> None:
                 nvscope_status["nvscope_probe_ok"],
                 nvscope_status["nvscope_probe_summary"],
             )
+        logger.info(
+            "ffmpeg video encoders (%s): %s",
+            ffmpeg_real_path(),
+            ", ".join(AVAILABLE_VIDEO_ENCODERS) if AVAILABLE_VIDEO_ENCODERS else "(none)",
+        )
     except Exception as exc:
         logger.error("startup self-check error: %s", exc, exc_info=True)
 
@@ -201,11 +211,20 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
     A failed startup probe is re-checked once per job (the boot-time probe can
     race GPU plumbing on some hosts); a successful probe is trusted for the
     worker's lifetime.
+
+    CPU fallback encoders must appear in ffmpeg -encoders (probed without
+    nvscope). Otherwise the --output-video-encoder flag is dropped so FaceFusion
+    can pick a valid default instead of failing argparse with an empty choice list.
     """
     global NVENC_AVAILABLE
     if NVENC_AVAILABLE:
         return extra_args
-    if any(str(arg) in _NVENC_ENCODER_FALLBACKS for arg in extra_args):
+
+    args = [str(a) for a in extra_args]
+    if not any(arg in _NVENC_ENCODER_FALLBACKS for arg in args):
+        return extra_args
+
+    if any(arg in _NVENC_ENCODER_FALLBACKS for arg in args):
         _log_debug_event(
             job_logger,
             TRACE_LEVEL,
@@ -223,24 +242,62 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
                 {},
             )
             return extra_args
-    patched = []
-    replacements = []
-    for arg in extra_args:
-        replacement = _NVENC_ENCODER_FALLBACKS.get(str(arg))
-        if replacement:
+
+    available = set(AVAILABLE_VIDEO_ENCODERS)
+    patched: list = []
+    replacements: list[str] = []
+    dropped: list[str] = []
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--output-video-encoder" and index + 1 < len(args):
+            encoder = args[index + 1]
+            replacement = _NVENC_ENCODER_FALLBACKS.get(encoder)
+            if replacement and replacement in available:
+                patched.extend(["--output-video-encoder", replacement])
+                replacements.append(f"{encoder} -> {replacement}")
+            elif replacement:
+                dropped.append(encoder)
+                job_logger.warning(
+                    "NVENC fallback: dropping --output-video-encoder %s; %s not in ffmpeg -encoders",
+                    encoder,
+                    replacement,
+                )
+            else:
+                patched.extend(["--output-video-encoder", encoder])
+            index += 2
+            continue
+
+        replacement = _NVENC_ENCODER_FALLBACKS.get(arg)
+        if replacement and replacement in available:
             replacements.append(f"{arg} -> {replacement}")
             patched.append(replacement)
+        elif replacement:
+            dropped.append(arg)
+            job_logger.warning(
+                "NVENC fallback: dropping encoder %s; %s not in ffmpeg -encoders",
+                arg,
+                replacement,
+            )
         else:
             patched.append(arg)
+        index += 1
+
     if replacements:
         job_logger.warning(
             "NVENC FALLBACK ACTIVE: nvenc probe failed (startup and re-probe); encoding on CPU | %s",
             ", ".join(replacements),
         )
+    elif dropped:
+        job_logger.warning(
+            "NVENC FALLBACK ACTIVE: nvenc unavailable and CPU encoder not listed by ffmpeg -encoders; dropped %s",
+            ", ".join(dropped),
+        )
     return patched
 
 
 logger.info("Logger initialized. Ready to process jobs.")
+AVAILABLE_VIDEO_ENCODERS = probe_available_video_encoders()
 _startup_self_check()
 NVENC_AVAILABLE = _probe_nvenc()
 
