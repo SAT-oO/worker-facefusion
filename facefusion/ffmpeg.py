@@ -85,12 +85,15 @@ def get_available_encoder_set() -> EncoderSet:
 		'audio': [],
 		'video': []
 	}
-	commands = ffmpeg_builder.chain(
+	commands = ffmpeg_builder.run(ffmpeg_builder.chain(
 		ffmpeg_builder.get_encoders()
-	)
-	process = run_ffmpeg(commands)
+	))
 
-	while line := process.stdout.readline().decode().lower():
+	# Argparse is built before process_manager.start(); always wait for ffmpeg here.
+	result = subprocess.run(commands, capture_output = True, text = True)
+	output = (result.stdout or '').lower()
+
+	for line in output.splitlines():
 		if line.startswith(' a'):
 			audio_encoder = line.split()[1]
 

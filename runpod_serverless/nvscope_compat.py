@@ -16,12 +16,28 @@ _NVSCOPE_LIB = "/usr/local/lib/nvscope/libnvscope.so"
 
 
 def _ffmpeg_real_path() -> str:
-    return os.environ.get("FFMPEG_REAL_PATH", "/usr/bin/ffmpeg")
+    explicit = os.environ.get("FFMPEG_REAL_PATH")
+    if explicit:
+        return explicit
+    if os.path.isfile("/usr/bin/ffmpeg"):
+        return "/usr/bin/ffmpeg"
+    return shutil.which("ffmpeg") or "/usr/bin/ffmpeg"
 
 
 def ffmpeg_real_path() -> str:
     """System ffmpeg path, without the nvscope PATH wrapper."""
     return _ffmpeg_real_path()
+
+
+def facefusion_subprocess_env() -> dict[str, str]:
+    """Environment for facefusion subprocesses.
+
+    Encoder discovery uses FFMPEG_ENCODER_PROBE (bare ffmpeg). Actual video
+    encode/decode still goes through the PATH nvscope wrapper.
+    """
+    env = os.environ.copy()
+    env["FFMPEG_ENCODER_PROBE"] = _ffmpeg_real_path()
+    return env
 
 
 def is_nvscope_disabled() -> bool:
@@ -68,6 +84,20 @@ def probe_available_video_encoders(timeout: int = 30) -> list[str]:
             if len(parts) >= 2:
                 encoders.append(parts[1])
     return encoders
+
+
+def probe_facefusion_video_encoders(timeout: int = 30) -> list[str]:
+    """Video encoders FaceFusion argparse will accept (ffmpeg list ∩ FaceFusion choices)."""
+    raw = set(probe_available_video_encoders(timeout))
+    if not raw:
+        return []
+
+    try:
+        from facefusion.choices import output_video_encoders
+    except ImportError:
+        return sorted(raw)
+
+    return [name for name in output_video_encoders if name in raw]
 
 
 def describe_gpu_devices() -> str:

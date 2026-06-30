@@ -11,8 +11,10 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 _RUNPOD_DIR = os.path.join(os.path.dirname(__file__), "..")
-if _RUNPOD_DIR not in sys.path:
-    sys.path.insert(0, _RUNPOD_DIR)
+_REPO_ROOT = os.path.abspath(os.path.join(_RUNPOD_DIR, ".."))
+for path in (_RUNPOD_DIR, _REPO_ROOT):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 import nvscope_compat  # noqa: E402
 
@@ -73,6 +75,17 @@ class NvscopeCompatTest(unittest.TestCase):
         with patch.object(nvscope_compat.os.path, "isfile", return_value=True):
             with patch.object(nvscope_compat.subprocess, "run", return_value=fake_proc):
                 encoders = nvscope_compat.probe_available_video_encoders()
+        self.assertEqual(encoders, ["libx264", "h264_nvenc"])
+
+    def test_probe_facefusion_video_encoders_filters_to_choices(self):
+        choices = ["libx264", "h264_nvenc", "libx265"]
+        with patch.object(
+            nvscope_compat,
+            "probe_available_video_encoders",
+            return_value=["libx264", "h264_nvenc", "some_other_codec"],
+        ):
+            with patch("facefusion.choices.output_video_encoders", choices):
+                encoders = nvscope_compat.probe_facefusion_video_encoders()
         self.assertEqual(encoders, ["libx264", "h264_nvenc"])
 
     def test_probe_available_video_encoders_missing_binary(self):

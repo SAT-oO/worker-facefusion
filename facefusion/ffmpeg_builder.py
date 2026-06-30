@@ -1,4 +1,5 @@
 import itertools
+import os
 import shutil
 from typing import List, Optional
 
@@ -9,7 +10,10 @@ from facefusion.types import AudioEncoder, Command, CommandSet, Duration, Fps, S
 
 
 def run(commands : List[Command]) -> List[Command]:
-	return [ shutil.which('ffmpeg'), '-loglevel', 'error' ] + commands
+	ffmpeg_path = os.environ.get('FFMPEG_ENCODER_PROBE') if '-encoders' in commands else None
+	if not ffmpeg_path:
+		ffmpeg_path = shutil.which('ffmpeg')
+	return [ ffmpeg_path, '-loglevel', 'error' ] + commands
 
 
 def chain(*commands : List[Command]) -> List[Command]:

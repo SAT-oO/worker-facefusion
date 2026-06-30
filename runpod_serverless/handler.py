@@ -18,8 +18,9 @@ import runpod
 
 from nvscope_compat import (
     describe_nvscope_status,
+    facefusion_subprocess_env,
     ffmpeg_real_path,
-    probe_available_video_encoders,
+    probe_facefusion_video_encoders,
     resolve_ffmpeg_executable,
 )
 
@@ -212,8 +213,8 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
     race GPU plumbing on some hosts); a successful probe is trusted for the
     worker's lifetime.
 
-    CPU fallback encoders must appear in ffmpeg -encoders (probed without
-    nvscope). Otherwise the --output-video-encoder flag is dropped so FaceFusion
+    CPU fallback encoders must appear in FaceFusion's encoder choices (probed via
+    bare ffmpeg). Otherwise the --output-video-encoder flag is dropped so FaceFusion
     can pick a valid default instead of failing argparse with an empty choice list.
     """
     global NVENC_AVAILABLE
@@ -297,7 +298,7 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
 
 
 logger.info("Logger initialized. Ready to process jobs.")
-AVAILABLE_VIDEO_ENCODERS = probe_available_video_encoders()
+AVAILABLE_VIDEO_ENCODERS = probe_facefusion_video_encoders()
 _startup_self_check()
 NVENC_AVAILABLE = _probe_nvenc()
 
@@ -663,7 +664,13 @@ def handler(event):
             {"cmd": cmd},
         )
         phase_started = time()
-        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=_REPO_ROOT)
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=_REPO_ROOT,
+            env=facefusion_subprocess_env(),
+        )
         timings["facefusion_ms"] = _elapsed_ms(phase_started)
         _log_debug_event(
             job_logger,
