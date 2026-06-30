@@ -37,7 +37,52 @@ def facefusion_subprocess_env() -> dict[str, str]:
     """
     env = os.environ.copy()
     env["FFMPEG_ENCODER_PROBE"] = _ffmpeg_real_path()
+    gpu_uuid = resolve_nvscope_gpu_uuid()
+    if gpu_uuid:
+        env["NVSCOPE_GPU_UUID"] = gpu_uuid
     return env
+
+
+def resolve_nvscope_gpu_uuid() -> str | None:
+    """Return the container-assigned GPU UUID for nvscope ioctl filtering."""
+    explicit = os.environ.get("NVSCOPE_GPU_UUID", "").strip()
+    if explicit:
+        return explicit
+
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return None
+
+    if proc.returncode != 0:
+        return None
+
+    for line in (proc.stdout or "").splitlines():
+        value = line.strip()
+        if value:
+            return value
+    return None
+
+
+def warmup_nvscope(timeout: int = 30) -> tuple[bool, str]:
+    """Prime nvscope GPU-id tables before the first NVENC ioctl alloc."""
+    if not is_nvscope_installed():
+        return False, "nvscope not installed"
+
+    probe_ok, probe_summary = run_nvscope_probe(timeout=timeout)
+    gpu_uuid = resolve_nvscope_gpu_uuid()
+    if gpu_uuid and not os.environ.get("NVSCOPE_GPU_UUID"):
+        os.environ["NVSCOPE_GPU_UUID"] = gpu_uuid
+
+    summary = probe_summary
+    if gpu_uuid:
+        summary = f"{summary}; gpu_uuid={gpu_uuid}" if summary else f"gpu_uuid={gpu_uuid}"
+    return probe_ok, summary
 
 
 def is_nvscope_disabled() -> bool:

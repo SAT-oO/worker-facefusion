@@ -29,23 +29,20 @@
   "profiles": [
     {
       "name": "production",
-      "description": "Production defaults (same as tests/benchmark/config.json production profile)",
+      "description": "Production defaults: box mask, face selector one/large-small (same as tests/benchmark/config.json production profile)",
       "extra_args": [
         "--execution-providers", "cuda",
         "--execution-thread-count", "8",
         "--video-memory-strategy", "tolerant",
-        "--face-detector-model", "retinaface",
-        "--face-detector-score", "0.3",
         "--face-swapper-pixel-boost", "256x256",
         "--output-video-scale", "1.0",
         "--output-video-encoder", "h264_nvenc",
         "--output-video-preset", "fast",
         "--output-video-quality", "85",
         "--temp-frame-format", "png",
-        "--face-mask-types", "box", "occlusion", "region",
+        "--face-mask-types", "box",
         "--face-selector-mode", "one",
-        "--face-selector-order", "large-small",
-        "--face-landmarker-model", "peppa_wutz"
+        "--face-selector-order", "large-small"
       ]
     }
   ],

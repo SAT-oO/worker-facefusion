@@ -1,11 +1,15 @@
 from shutil import which
 
 from facefusion import ffmpeg_builder
-from facefusion.ffmpeg_builder import chain, concat, keep_video_alpha, run, select_frame_range, set_audio_quality, set_audio_sample_size, set_stream_mode, set_video_encoder, set_video_fps, set_video_quality
+from facefusion.ffmpeg_builder import chain, concat, keep_video_alpha, run, select_frame_range, set_audio_quality, set_audio_sample_size, set_nvenc_gpu, set_stream_mode, set_video_encoder, set_video_fps, set_video_quality
 
 
 def test_run() -> None:
 	assert run([]) == [ which('ffmpeg'), '-loglevel', 'error' ]
+
+
+def test_set_nvenc_gpu() -> None:
+	assert set_nvenc_gpu(0) == [ '-gpu', '0' ]
 
 
 def test_chain() -> None:

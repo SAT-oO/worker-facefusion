@@ -99,6 +99,23 @@ class NvscopeCompatTest(unittest.TestCase):
         self.assertEqual(status["gpu_devices"], "nvidia3")
         self.assertNotIn("nvscope_probe_ok", status)
 
+    def test_resolve_nvscope_gpu_uuid_from_env(self):
+        with patch.dict(os.environ, {"NVSCOPE_GPU_UUID": "GPU-test"}, clear=False):
+            self.assertEqual(nvscope_compat.resolve_nvscope_gpu_uuid(), "GPU-test")
+
+    def test_facefusion_subprocess_env_sets_probe_and_gpu_uuid(self):
+        with patch.object(nvscope_compat, "_ffmpeg_real_path", return_value="/usr/bin/ffmpeg"):
+            with patch.object(nvscope_compat, "resolve_nvscope_gpu_uuid", return_value="GPU-abc"):
+                env = nvscope_compat.facefusion_subprocess_env()
+        self.assertEqual(env["FFMPEG_ENCODER_PROBE"], "/usr/bin/ffmpeg")
+        self.assertEqual(env["NVSCOPE_GPU_UUID"], "GPU-abc")
+
+    def test_warmup_nvscope_not_installed(self):
+        with patch.object(nvscope_compat, "is_nvscope_installed", return_value=False):
+            ok, summary = nvscope_compat.warmup_nvscope()
+        self.assertFalse(ok)
+        self.assertIn("not installed", summary)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

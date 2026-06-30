@@ -13,6 +13,8 @@ def run(commands : List[Command]) -> List[Command]:
 	ffmpeg_path = os.environ.get('FFMPEG_ENCODER_PROBE') if '-encoders' in commands else None
 	if not ffmpeg_path:
 		ffmpeg_path = shutil.which('ffmpeg')
+	if not ffmpeg_path:
+		ffmpeg_path = '/usr/bin/ffmpeg'
 	return [ ffmpeg_path, '-loglevel', 'error' ] + commands
 
 
@@ -185,6 +187,10 @@ def set_audio_volume(audio_volume : int) -> List[Command]:
 
 def set_video_encoder(video_encoder : str) -> List[Command]:
 	return [ '-c:v', video_encoder ]
+
+
+def set_nvenc_gpu(gpu_index : int = 0) -> List[Command]:
+	return [ '-gpu', str(gpu_index) ]
 
 
 def copy_video_encoder() -> List[Command]:

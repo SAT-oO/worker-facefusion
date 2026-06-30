@@ -7,7 +7,7 @@ from typing import List, Optional, cast
 from tqdm import tqdm
 
 import facefusion.choices
-from facefusion import ffmpeg_builder, logger, process_manager, state_manager, translator
+from facefusion import ffmpeg_builder, logger, memory, process_manager, state_manager, translator
 from facefusion.filesystem import get_file_format, remove_file
 from facefusion.temp_helper import get_temp_file_path, get_temp_frames_pattern
 from facefusion.types import AudioBuffer, AudioEncoder, Command, EncoderSet, Fps, Resolution, UpdateProgress, VideoEncoder, VideoFormat
@@ -226,11 +226,16 @@ def merge_video(target_path : str, temp_video_fps : Fps, output_video_resolution
 	temp_frames_pattern = get_temp_frames_pattern(target_path, '%08d')
 
 	output_video_encoder = fix_video_encoder(temp_video_format, output_video_encoder)
-	commands = ffmpeg_builder.chain(
+	memory.release_gpu_vram_for_video_encode(output_video_encoder)
+	merge_steps = [
 		ffmpeg_builder.set_input_fps(temp_video_fps),
 		ffmpeg_builder.set_input(temp_frames_pattern),
 		ffmpeg_builder.set_media_resolution(pack_resolution(output_video_resolution)),
 		ffmpeg_builder.set_video_encoder(output_video_encoder),
+	]
+	if output_video_encoder in [ 'h264_nvenc', 'hevc_nvenc' ]:
+		merge_steps.append(ffmpeg_builder.set_nvenc_gpu(0))
+	merge_steps.extend([
 		ffmpeg_builder.set_video_quality(output_video_encoder, output_video_quality),
 		ffmpeg_builder.set_video_preset(output_video_encoder, output_video_preset),
 		ffmpeg_builder.concat(
@@ -238,8 +243,9 @@ def merge_video(target_path : str, temp_video_fps : Fps, output_video_resolution
 			ffmpeg_builder.keep_video_alpha(output_video_encoder)
 		),
 		ffmpeg_builder.set_pixel_format(output_video_encoder),
-		ffmpeg_builder.force_output(temp_video_path)
-	)
+		ffmpeg_builder.force_output(temp_video_path),
+	])
+	commands = ffmpeg_builder.chain(*merge_steps)
 
 	with tqdm(total = merge_frame_total, desc = translator.get('merging'), unit = 'frame', ascii = ' =', disable = state_manager.get_item('log_level') in [ 'warn', 'error' ]) as progress:
 		process = run_ffmpeg_with_progress(commands, partial(update_progress, progress))

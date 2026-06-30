@@ -37,8 +37,9 @@ def _import_handler(probe_returncode: int):
         sys.path.insert(0, _RUNPOD_DIR)
 
     fake_proc = MagicMock(returncode=probe_returncode, stdout="", stderr="probe stub")
-    with patch("subprocess.run", return_value=fake_proc):
-        handler = importlib.import_module("handler")
+    with patch("nvscope_compat.warmup_nvscope", return_value=(False, "stub")):
+        with patch("subprocess.run", return_value=fake_proc):
+            handler = importlib.import_module("handler")
     handler.AVAILABLE_VIDEO_ENCODERS = ["libx264", "libx265", "h264_nvenc", "hevc_nvenc"]
     return handler
 
@@ -88,10 +89,11 @@ class EncoderFallbackTest(unittest.TestCase):
         self.assertTrue(handler.NVENC_AVAILABLE)
         job_logger.warning.assert_not_called()
 
-        # Once recovered, subsequent jobs trust the cached value (no re-probe).
+        # Every NVENC job re-probes; a later failure applies fallback.
         with patch.object(handler, "_probe_nvenc", return_value=False) as reprobe2:
-            self.assertEqual(handler._apply_nvenc_fallback(args, job_logger), args)
-        reprobe2.assert_not_called()
+            patched = handler._apply_nvenc_fallback(args, job_logger)
+        reprobe2.assert_called_once()
+        self.assertEqual(patched, ["--output-video-encoder", "libx264"])
 
     def test_probe_success_passes_nvenc_through(self):
         handler = _import_handler(probe_returncode=0)
@@ -99,7 +101,8 @@ class EncoderFallbackTest(unittest.TestCase):
 
         job_logger = MagicMock()
         args = ["--output-video-encoder", "h264_nvenc"]
-        self.assertEqual(handler._apply_nvenc_fallback(args, job_logger), args)
+        with patch.object(handler, "_probe_nvenc", return_value=True):
+            self.assertEqual(handler._apply_nvenc_fallback(args, job_logger), args)
         job_logger.warning.assert_not_called()
 
     def test_probe_failure_drops_encoder_when_cpu_fallback_unavailable(self):

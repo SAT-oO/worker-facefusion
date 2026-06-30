@@ -22,6 +22,7 @@ from nvscope_compat import (
     ffmpeg_real_path,
     probe_facefusion_video_encoders,
     resolve_ffmpeg_executable,
+    warmup_nvscope,
 )
 
 _RUNPOD_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -180,12 +181,13 @@ def _startup_self_check() -> None:
 
 def _probe_nvenc() -> bool:
     """One-frame h264_nvenc encode to verify NVENC actually works on this worker."""
+    warmup_nvscope()
     try:
         proc = subprocess.run(
             [
                 resolve_ffmpeg_executable(), "-hide_banner", "-loglevel", "error",
                 "-f", "lavfi", "-i", "testsrc=duration=0.1:size=256x256:rate=25",
-                "-frames:v", "1", "-c:v", "h264_nvenc", "-f", "null", "-",
+                "-frames:v", "1", "-c:v", "h264_nvenc", "-gpu", "0", "-f", "null", "-",
             ],
             capture_output=True,
             text=True,
@@ -209,41 +211,28 @@ _NVENC_ENCODER_FALLBACKS = {
 def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
     """Replace NVENC encoders with CPU equivalents when NVENC is unavailable.
 
-    A failed startup probe is re-checked once per job (the boot-time probe can
-    race GPU plumbing on some hosts); a successful probe is trusted for the
-    worker's lifetime.
-
-    CPU fallback encoders must appear in FaceFusion's encoder choices (probed via
-    bare ffmpeg). Otherwise the --output-video-encoder flag is dropped so FaceFusion
-    can pick a valid default instead of failing argparse with an empty choice list.
+    NVENC is re-probed for every job that requests it. A prior successful probe
+    does not guarantee the next encode can allocate NVENC buffers (e.g. when ONNX
+    still holds VRAM or nvscope has not yet mapped the assigned GPU UUID).
     """
     global NVENC_AVAILABLE
-    if NVENC_AVAILABLE:
-        return extra_args
 
     args = [str(a) for a in extra_args]
     if not any(arg in _NVENC_ENCODER_FALLBACKS for arg in args):
         return extra_args
 
-    if any(arg in _NVENC_ENCODER_FALLBACKS for arg in args):
-        _log_debug_event(
-            job_logger,
-            TRACE_LEVEL,
-            "handler.py:nvenc-fallback",
-            "nvenc marked unavailable; re-probing before applying fallback",
-            {},
-        )
-        if _probe_nvenc():
-            NVENC_AVAILABLE = True
-            _log_debug_event(
-                job_logger,
-                TRACE_LEVEL,
-                "handler.py:nvenc-fallback",
-                "nvenc re-probe OK; keeping NVENC encoder",
-                {},
-            )
-            return extra_args
+    _log_debug_event(
+        job_logger,
+        TRACE_LEVEL,
+        "handler.py:nvenc-fallback",
+        "probing NVENC before job encode",
+        {},
+    )
+    if _probe_nvenc():
+        NVENC_AVAILABLE = True
+        return extra_args
 
+    NVENC_AVAILABLE = False
     available = set(AVAILABLE_VIDEO_ENCODERS)
     patched: list = []
     replacements: list[str] = []
@@ -299,6 +288,7 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
 
 logger.info("Logger initialized. Ready to process jobs.")
 AVAILABLE_VIDEO_ENCODERS = probe_facefusion_video_encoders()
+warmup_nvscope()
 _startup_self_check()
 NVENC_AVAILABLE = _probe_nvenc()
 
