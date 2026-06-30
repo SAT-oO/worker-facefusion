@@ -1,0 +1,18 @@
+#!/bin/sh
+# Wrap system ffmpeg with nvscope so NVENC/NVDEC see container-local GPU topology.
+# Installed as /usr/local/bin/ffmpeg (earlier in PATH than /usr/bin/ffmpeg).
+set -eu
+
+REAL_FFMPEG="${FFMPEG_REAL_PATH:-/usr/bin/ffmpeg}"
+NVSCOPE_BIN="${NVSCOPE_BIN:-/usr/local/bin/nvscope}"
+NVSCOPE_LIB="${NVSCOPE_LIB:-/usr/local/lib/nvscope/libnvscope.so}"
+
+if [ "${NVSCOPE_DISABLED:-0}" = "1" ]; then
+	exec "$REAL_FFMPEG" "$@"
+fi
+
+if [ -x "$NVSCOPE_BIN" ] && [ -f "$NVSCOPE_LIB" ]; then
+	exec "$NVSCOPE_BIN" -- "$REAL_FFMPEG" "$@"
+fi
+
+exec "$REAL_FFMPEG" "$@"

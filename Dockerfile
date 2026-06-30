@@ -1,3 +1,17 @@
+# nvscope: LD_PRELOAD shim so NVENC/NVDEC see container-local GPU topology on RunPod.
+# https://github.com/MadiatorLabs/nvscope
+FROM ubuntu:24.04 AS nvscope-build
+ARG NVSCOPE_REF=main
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src/nvscope
+RUN git clone --depth 1 --branch "${NVSCOPE_REF}" https://github.com/MadiatorLabs/nvscope.git . \
+    || git clone --depth 1 https://github.com/MadiatorLabs/nvscope.git .
+RUN make
+
 FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -101,5 +115,14 @@ WORKDIR /app
 COPY . .
 COPY --from=models /app/.assets /app/.assets
 
-# RunPod may mount the GPU as an arbitrary /dev/nvidiaN; NVENC expects /dev/nvidia0.
-CMD ["sh", "-c", "ACTIVE_DEV=$(ls /dev/nvidia[0-9]* 2>/dev/null | head -n 1); if [ -n \"$ACTIVE_DEV\" ] && [ \"$ACTIVE_DEV\" != /dev/nvidia0 ]; then ln -sf \"$ACTIVE_DEV\" /dev/nvidia0; fi; exec python3 -u runpod_serverless/handler.py"]
+# nvscope runtime: filter NVIDIA topology to mounted /dev/nvidiaN devices.
+COPY --from=nvscope-build /src/nvscope/libnvscope.so /usr/local/lib/nvscope/libnvscope.so
+COPY --from=nvscope-build /src/nvscope/tools/nvscope /usr/local/bin/nvscope
+COPY --from=nvscope-build /src/nvscope/tools/nvscope-probe /usr/local/bin/nvscope-probe
+COPY runpod_serverless/scripts/ffmpeg-nvscope /usr/local/bin/ffmpeg
+COPY runpod_serverless/scripts/entrypoint.sh /usr/local/bin/worker-entrypoint.sh
+RUN chmod +x /usr/local/bin/nvscope /usr/local/bin/nvscope-probe \
+        /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh
+
+# Set NVSCOPE_TRACE=1 or NVSCOPE_DISABLED=1 to tune runtime behavior.
+CMD ["/usr/local/bin/worker-entrypoint.sh"]

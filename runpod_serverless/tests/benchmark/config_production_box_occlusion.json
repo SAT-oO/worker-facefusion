@@ -1,0 +1,53 @@
+{
+  "endpoint_id": "${ENDPOINT_ID}",
+  "fixtures": {
+    "source_b64_path": "../fixtures/source.b64",
+    "source_image_format": "jpg",
+    "default_target_key": "60s"
+  },
+  "targets": {
+    "60s": "${BENCHMARK_TARGET_60S_URL}",
+    "120s": "${BENCHMARK_TARGET_120S_URL}",
+    "300s": "${BENCHMARK_TARGET_300S_URL}"
+  },
+  "runpod": {
+    "idle_wait_seconds": 90,
+    "poll_interval_seconds": 2,
+    "job_timeout_seconds": 1800,
+    "flashboot_cold_threshold_ms": 30000
+  },
+  "base_input": {
+    "output_format": "mp4",
+    "processors": ["face_swapper"],
+    "face_swapper_model": "inswapper_128_fp16",
+    "policy": {
+      "executionTimeout": 360000,
+      "ttl": 3600000,
+      "lowPriority": false
+    }
+  },
+  "profiles": [
+    {
+      "name": "production",
+      "description": "Production defaults (same as tests/benchmark/config.json production profile)",
+      "extra_args": [
+        "--execution-providers", "cuda",
+        "--execution-thread-count", "8",
+        "--video-memory-strategy", "tolerant",
+        "--face-detector-model", "retinaface",
+        "--face-detector-score", "0.3",
+        "--face-swapper-pixel-boost", "256x256",
+        "--output-video-scale", "1.0",
+        "--output-video-encoder", "h264_nvenc",
+        "--output-video-preset", "fast",
+        "--output-video-quality", "85",
+        "--temp-frame-format", "png",
+        "--face-mask-types", "box", "occlusion", "region",
+        "--face-selector-mode", "one",
+        "--face-selector-order", "large-small",
+        "--face-landmarker-model", "peppa_wutz"
+      ]
+    }
+  ],
+  "scenarios": {}
+}

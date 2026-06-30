@@ -16,6 +16,8 @@ from botocore.client import Config
 
 import runpod
 
+from nvscope_compat import describe_nvscope_status, resolve_ffmpeg_executable
+
 _RUNPOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_RUNPOD_DIR)
 _LOGGER_NAME = "runpod_worker"
@@ -147,6 +149,20 @@ def _startup_self_check() -> None:
         for key in ("R2_ACCOUNT_ID", "R2_BUCKET", "R2_PUBLIC_BASE_URL", "R2_ENDPOINT"):
             value = os.environ.get(key, "")
             logger.info("env %s=%s", key, "<set>" if value else "<unset>")
+        nvscope_status = describe_nvscope_status()
+        logger.info(
+            "nvscope: installed=%s disabled=%s ffmpeg=%s gpu_devices=%s",
+            nvscope_status["nvscope_installed"],
+            nvscope_status["nvscope_disabled"],
+            nvscope_status["ffmpeg_path"],
+            nvscope_status["gpu_devices"],
+        )
+        if "nvscope_probe_summary" in nvscope_status:
+            logger.info(
+                "nvscope probe: ok=%s | %s",
+                nvscope_status["nvscope_probe_ok"],
+                nvscope_status["nvscope_probe_summary"],
+            )
     except Exception as exc:
         logger.error("startup self-check error: %s", exc, exc_info=True)
 
@@ -156,7 +172,7 @@ def _probe_nvenc() -> bool:
     try:
         proc = subprocess.run(
             [
-                "ffmpeg", "-hide_banner", "-loglevel", "error",
+                resolve_ffmpeg_executable(), "-hide_banner", "-loglevel", "error",
                 "-f", "lavfi", "-i", "testsrc=duration=0.1:size=256x256:rate=25",
                 "-frames:v", "1", "-c:v", "h264_nvenc", "-f", "null", "-",
             ],

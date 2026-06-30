@@ -40,6 +40,7 @@ docker pull satoo869/worker-facefusion:v1.0
 The build:
 
 - Base: `nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04`, Python 3.11, FFmpeg.
+- **GPU video stack:** [nvscope](https://github.com/MadiatorLabs/nvscope) is baked into the image; `/usr/local/bin/ffmpeg` wraps the system binary so NVENC/NVDEC see only the container-assigned GPU topology (replaces the old `/dev/nvidia0` symlink hack).
 - Installs `requirements.txt` + `runpod_serverless/requirements-runpod.txt` and `onnxruntime-gpu==1.24.4`.
 - Runs `tools/preload_face_swap_models.py` and verifies core ONNX files under `.assets/models/`.
 
@@ -322,6 +323,8 @@ Run `python facefusion.py headless-run --help` (or upstream docs) for the full f
 | `R2_BUCKET`            | Yes      | Default output bucket.                            |
 | `R2_PUBLIC_BASE_URL`   | No       | Public base URL for outputs (and R2 URL parsing). |
 | `R2_ENDPOINT`          | No       | Custom S3 endpoint (MinIO, etc.).                 |
+| `NVSCOPE_DISABLED`     | No       | Set `1` to skip the nvscope ffmpeg wrapper (debug/local). |
+| `NVSCOPE_TRACE`        | No       | Set `1` for nvscope stderr trace logs during ffmpeg.      |
 
 
 ### Docker image build (optional overrides)
