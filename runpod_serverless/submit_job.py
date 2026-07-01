@@ -47,6 +47,7 @@ def default_body() -> dict[str, Any]:
                 "--execution-providers", "cuda",
                 "--execution-thread-count", "8",
                 "--video-memory-strategy", "tolerant",
+                "--face-detector-model", "retinaface",
                 "--face-swapper-pixel-boost", "256x256",
                 "--output-video-scale", "1.0",
                 "--output-video-encoder", "h264_nvenc",
