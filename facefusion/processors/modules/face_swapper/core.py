@@ -22,9 +22,11 @@ from facefusion.processors.modules.face_swapper import choices as face_swapper_c
 from facefusion.processors.modules.face_swapper.types import FaceSwapperInputs
 from facefusion.processors.pixel_boost import explode_pixel_boost, implode_pixel_boost
 from facefusion.processors.types import ProcessorOutputs
+from facefusion.source_validator import format_validation_debug, format_validation_error, is_source_validation_enabled, validate_source_faces
+from facefusion.swap_quality import is_degenerate_swap_crop
 from facefusion.program_helper import find_argument_group
 from facefusion.thread_helper import conditional_thread_semaphore
-from facefusion.types import ApplyStateItem, Args, DownloadScope, Embedding, Face, InferencePool, ModelOptions, ModelSet, ProcessMode, VisionFrame
+from facefusion.types import ApplyStateItem, Args, DownloadScope, Embedding, Face, InferencePool, Mask, Matrix, ModelOptions, ModelSet, ProcessMode, VisionFrame
 from facefusion.vision import read_static_image, read_static_images, read_static_video_frame, unpack_resolution
 
 
@@ -518,13 +520,17 @@ def register_args(program : ArgumentParser) -> None:
 		face_swapper_pixel_boost_choices = face_swapper_choices.face_swapper_set.get(known_args.face_swapper_model)
 		group_processors.add_argument('--face-swapper-pixel-boost', help = translator.get('help.pixel_boost', __package__), default = config.get_str_value('processors', 'face_swapper_pixel_boost', get_first(face_swapper_pixel_boost_choices)), choices = face_swapper_pixel_boost_choices)
 		group_processors.add_argument('--face-swapper-weight', help = translator.get('help.weight', __package__), type = float, default = config.get_float_value('processors', 'face_swapper_weight', '0.5'), choices = face_swapper_choices.face_swapper_weight_range)
-		facefusion.jobs.job_store.register_step_keys([ 'face_swapper_model', 'face_swapper_pixel_boost', 'face_swapper_weight' ])
+		group_processors.add_argument('--skip-source-validation', help = 'skip strict source face quality validation', action = 'store_true', default = config.get_bool_value('processors', 'skip_source_validation', 'false'))
+		group_processors.add_argument('--skip-swap-output-guard', help = 'skip per-frame guard that avoids pasting degenerate swap crops', action = 'store_true', default = config.get_bool_value('processors', 'skip_swap_output_guard', 'false'))
+		facefusion.jobs.job_store.register_step_keys([ 'face_swapper_model', 'face_swapper_pixel_boost', 'face_swapper_weight', 'skip_source_validation', 'skip_swap_output_guard' ])
 
 
 def apply_args(args : Args, apply_state_item : ApplyStateItem) -> None:
 	apply_state_item('face_swapper_model', args.get('face_swapper_model'))
 	apply_state_item('face_swapper_pixel_boost', args.get('face_swapper_pixel_boost'))
 	apply_state_item('face_swapper_weight', args.get('face_swapper_weight'))
+	apply_state_item('skip_source_validation', args.get('skip_source_validation'))
+	apply_state_item('skip_swap_output_guard', args.get('skip_swap_output_guard'))
 
 
 def pre_check() -> bool:
@@ -552,6 +558,20 @@ def pre_process(mode : ProcessMode) -> bool:
 		)
 		logger.error(translator.get('no_source_face_detected') + translator.get('exclamation_mark'), __name__)
 		return False
+
+	if is_source_validation_enabled():
+		model_template = get_model_options().get('template')
+		swap_crop_size = unpack_resolution(state_manager.get_item('face_swapper_pixel_boost'))
+		passed, report = validate_source_faces(
+			source_vision_frames,
+			model_template,
+			swap_crop_size,
+			probe_swap_crop
+		)
+		if not passed:
+			logger.debug(format_validation_debug(report), __name__)
+			logger.error(format_validation_error(report) + translator.get('exclamation_mark'), __name__)
+			return False
 
 	if mode in [ 'output', 'preview' ] and not is_image(state_manager.get_item('target_path')) and not is_video(state_manager.get_item('target_path')):
 		logger.error(translator.get('choose_image_or_video_target') + translator.get('exclamation_mark'), __name__)
@@ -584,7 +604,7 @@ def post_process() -> None:
 		face_recognizer.clear_inference_pool()
 
 
-def swap_face(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
+def prepare_swap_paste(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> Optional[Tuple[VisionFrame, Matrix, Mask]]:
 	model_template = get_model_options().get('template')
 	model_size = get_model_options().get('size')
 	pixel_boost_size = unpack_resolution(state_manager.get_item('face_swapper_pixel_boost'))
@@ -618,9 +638,38 @@ def swap_face(source_face : Face, target_face : Face, temp_vision_frame : Vision
 		region_mask = create_region_mask(crop_vision_frame, state_manager.get_item('face_mask_regions'))
 		crop_masks.append(region_mask)
 
+	if not crop_masks:
+		return None
+
 	crop_mask = numpy.minimum.reduce(crop_masks).clip(0, 1)
-	paste_vision_frame = paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
-	return paste_vision_frame
+	return crop_vision_frame, affine_matrix, crop_mask
+
+
+def probe_swap_crop(source_face : Face, vision_frame : VisionFrame) -> Optional[VisionFrame]:
+	swap_paste = prepare_swap_paste(source_face, source_face, vision_frame)
+	if swap_paste:
+		return swap_paste[0]
+	return None
+
+
+def swap_face(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
+	swap_paste = prepare_swap_paste(source_face, target_face, temp_vision_frame)
+	if not swap_paste:
+		return temp_vision_frame
+
+	crop_vision_frame, affine_matrix, crop_mask = swap_paste
+	if not state_manager.get_item('skip_swap_output_guard'):
+		is_degenerate, degenerate_metrics = is_degenerate_swap_crop(crop_vision_frame)
+		if is_degenerate:
+			logger.debug(
+				'skipping degenerate swap paste '
+				f'(mean_brightness={degenerate_metrics.get("mean_brightness")} '
+				f'black_pixel_ratio={degenerate_metrics.get("black_pixel_ratio")})',
+				__name__
+			)
+			return temp_vision_frame
+
+	return paste_back(temp_vision_frame, crop_vision_frame, crop_mask, affine_matrix)
 
 
 def forward_swap_face(source_face : Face, target_face : Face, crop_vision_frame : VisionFrame) -> VisionFrame:

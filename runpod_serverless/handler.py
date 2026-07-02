@@ -460,6 +460,31 @@ def _diagnose_source_image(source_path: str) -> dict:
     return result
 
 
+def _parse_source_quality_stderr(stderr_text: str) -> dict | None:
+    marker = "source_face_quality_insufficient"
+    if marker not in stderr_text.lower():
+        return None
+
+    result: dict = {"error": marker}
+    for line in stderr_text.splitlines():
+        stripped = line.strip()
+        lower = stripped.lower()
+        if marker in lower and ":" in stripped:
+            _, reason_text = stripped.split(":", 1)
+            reasons = [part.strip() for part in reason_text.strip().rstrip("!").split(",") if part.strip()]
+            if reasons:
+                result["reasons"] = reasons
+        json_start = stripped.find("{")
+        if json_start >= 0 and stripped.rstrip().endswith("}"):
+            try:
+                payload = json.loads(stripped[json_start:])
+                if isinstance(payload, dict):
+                    result["metrics"] = payload
+            except json.JSONDecodeError:
+                pass
+    return result
+
+
 def _diagnose_yolo_model_load():
     model_path = os.path.join(_models_dir(), "yoloface_8n.onnx")
     result = {
@@ -678,6 +703,7 @@ def handler(event):
         if proc.returncode != 0 or not os.path.exists(output_path):
             yolo_diagnostics = None
             source_diagnostics = None
+            source_quality = None
             stderr_text = proc.stderr or ""
             if "loading model yoloface_8n failed" in stderr_text:
                 yolo_diagnostics = _diagnose_yolo_model_load()
@@ -688,7 +714,18 @@ def handler(event):
                     "captured local yoloface load diagnostics",
                     yolo_diagnostics,
                 )
-            if "no source face detected" in stderr_text.lower() and source_path:
+            if "source_face_quality_insufficient" in stderr_text.lower():
+                source_quality = _parse_source_quality_stderr(stderr_text)
+                if source_path:
+                    source_diagnostics = _diagnose_source_image(source_path)
+                _log_debug_event(
+                    job_logger,
+                    TRACE_LEVEL,
+                    "handler.py:source-quality-diagnostics",
+                    "source face quality validation failed",
+                    source_quality or {},
+                )
+            elif "no source face detected" in stderr_text.lower() and source_path:
                 source_diagnostics = _diagnose_source_image(source_path)
                 _log_debug_event(
                     job_logger,
@@ -702,9 +739,16 @@ def handler(event):
                 diagnostics["yolo_model_load"] = yolo_diagnostics
             if source_diagnostics:
                 diagnostics["source_image"] = source_diagnostics
+            if source_quality:
+                diagnostics["source_quality"] = source_quality
             timings["handler_total_ms"] = _elapsed_ms(handler_started)
+            error_message = (
+                "source_face_quality_insufficient"
+                if source_quality
+                else f"headless-run failed (exit {proc.returncode})"
+            )
             result = {
-                "error": f"headless-run failed (exit {proc.returncode})",
+                "error": error_message,
                 "stderr": _tail(proc.stderr),
                 "stdout": _tail(proc.stdout),
                 "diagnostics": diagnostics,
