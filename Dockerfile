@@ -127,8 +127,9 @@ COPY runpod_serverless/scripts/ffmpeg-nvscope /usr/local/bin/ffmpeg
 COPY runpod_serverless/scripts/entrypoint.sh /usr/local/bin/worker-entrypoint.sh
 RUN chmod +x /usr/local/bin/nvscope /usr/local/bin/nvscope-probe \
         /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
+    && sed -i 's/\r$//' /usr/local/bin/nvscope-probe /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
+    && sh -n /usr/local/bin/nvscope-probe /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
     && test -x /usr/local/bin/nvscope \
-    && test -x /usr/local/bin/nvscope-probe \
     && test -f /usr/local/lib/nvscope/libnvscope.so
 
 # Set NVSCOPE_TRACE=1 or NVSCOPE_DISABLED=1 to tune runtime behavior.
