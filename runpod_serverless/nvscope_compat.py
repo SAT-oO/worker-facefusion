@@ -12,6 +12,7 @@ import shutil
 import subprocess
 
 _NVSCOPE_BIN = "/usr/local/bin/nvscope"
+_NVSCOPE_PROBE = "/usr/local/bin/nvscope-probe"
 _NVSCOPE_LIB = "/usr/local/lib/nvscope/libnvscope.so"
 
 
@@ -94,6 +95,8 @@ def is_nvscope_installed() -> bool:
         not is_nvscope_disabled()
         and os.path.isfile(_NVSCOPE_BIN)
         and os.access(_NVSCOPE_BIN, os.X_OK)
+        and os.path.isfile(_NVSCOPE_PROBE)
+        and os.access(_NVSCOPE_PROBE, os.X_OK)
         and os.path.isfile(_NVSCOPE_LIB)
     )
 
@@ -153,13 +156,12 @@ def describe_gpu_devices() -> str:
 
 def run_nvscope_probe(timeout: int = 30) -> tuple[bool, str]:
     """Run nvscope-probe when installed; return (ok, one-line summary)."""
-    probe = shutil.which("nvscope-probe")
-    if not probe:
+    if not os.path.isfile(_NVSCOPE_PROBE) or not os.access(_NVSCOPE_PROBE, os.X_OK):
         return False, "nvscope-probe not installed"
 
     try:
         proc = subprocess.run(
-            [probe],
+            [_NVSCOPE_PROBE],
             capture_output=True,
             text=True,
             timeout=timeout,

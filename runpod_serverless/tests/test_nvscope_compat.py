@@ -39,6 +39,15 @@ class NvscopeCompatTest(unittest.TestCase):
                 with patch.object(nvscope_compat.os, "access", return_value=True):
                     self.assertTrue(nvscope_compat.is_nvscope_installed())
 
+    def test_is_nvscope_installed_false_when_probe_missing(self):
+        def isfile(path: str) -> bool:
+            return path != nvscope_compat._NVSCOPE_PROBE
+
+        with patch.dict(os.environ, {"NVSCOPE_DISABLED": "0"}, clear=False):
+            with patch.object(nvscope_compat.os.path, "isfile", side_effect=isfile):
+                with patch.object(nvscope_compat.os, "access", return_value=True):
+                    self.assertFalse(nvscope_compat.is_nvscope_installed())
+
     def test_resolve_ffmpeg_executable_prefers_which(self):
         with patch.object(nvscope_compat.shutil, "which", return_value="/usr/local/bin/ffmpeg"):
             self.assertEqual(nvscope_compat.resolve_ffmpeg_executable(), "/usr/local/bin/ffmpeg")
@@ -53,16 +62,17 @@ class NvscopeCompatTest(unittest.TestCase):
             self.assertEqual(nvscope_compat.describe_gpu_devices(), "nvidia2, nvidia7")
 
     def test_run_nvscope_probe_missing_binary(self):
-        with patch.object(nvscope_compat.shutil, "which", return_value=None):
+        with patch.object(nvscope_compat.os.path, "isfile", return_value=False):
             ok, summary = nvscope_compat.run_nvscope_probe()
         self.assertFalse(ok)
         self.assertIn("not installed", summary)
 
     def test_run_nvscope_probe_success(self):
         fake_proc = MagicMock(returncode=0, stdout="line1\nprobe ok\n", stderr="")
-        with patch.object(nvscope_compat.shutil, "which", return_value="/usr/local/bin/nvscope-probe"):
-            with patch.object(nvscope_compat.subprocess, "run", return_value=fake_proc):
-                ok, summary = nvscope_compat.run_nvscope_probe()
+        with patch.object(nvscope_compat.os.path, "isfile", return_value=True):
+            with patch.object(nvscope_compat.os, "access", return_value=True):
+                with patch.object(nvscope_compat.subprocess, "run", return_value=fake_proc):
+                    ok, summary = nvscope_compat.run_nvscope_probe()
         self.assertTrue(ok)
         self.assertEqual(summary, "probe ok")
 
