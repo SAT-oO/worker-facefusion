@@ -1,5 +1,5 @@
 import json
-from typing import Callable, List, Optional, Tuple
+from typing import List, Tuple
 
 import cv2
 import numpy
@@ -10,7 +10,6 @@ from facefusion.face_masker import create_occlusion_mask, create_region_mask
 from facefusion.face_recognizer import calculate_face_embedding
 from facefusion.face_selector import sort_faces_by_order
 from facefusion import state_manager
-from facefusion.swap_quality import is_degenerate_swap_crop
 from facefusion.types import Face, VisionFrame
 
 MIN_DETECTOR_SCORE = 0.7
@@ -29,11 +28,21 @@ SOURCE_QUALITY_MARKER = 'source_face_quality_insufficient'
 LEFT_EYE_INDICES = (36, 37, 38, 39, 40, 41)
 RIGHT_EYE_INDICES = (42, 43, 44, 45, 46, 47)
 
-ProbeSwapCrop = Callable[[Face, VisionFrame], Optional[VisionFrame]]
-
 
 def is_source_validation_enabled() -> bool:
 	return not state_manager.get_item('skip_source_validation')
+
+
+def select_source_samples(source_vision_frames : List[VisionFrame]) -> List[Tuple[VisionFrame, Face]]:
+	source_samples : List[Tuple[VisionFrame, Face]] = []
+
+	for vision_frame in source_vision_frames:
+		if vision_frame is None or not numpy.any(vision_frame):
+			continue
+		faces = sort_faces_by_order(get_many_faces([ vision_frame ]), 'large-small')
+		if faces:
+			source_samples.append((vision_frame, faces[0]))
+	return source_samples
 
 
 def eye_aspect_ratio(face_landmark_68 : numpy.ndarray, eye_indices : Tuple[int, ...]) -> float:
@@ -70,8 +79,7 @@ def embedding_cosine_similarity(first_embedding : numpy.ndarray, second_embeddin
 	return float(numpy.dot(first_norm, second_norm))
 
 
-def occlusion_center_visibility(warped_crop : VisionFrame) -> float:
-	occlusion_mask = create_occlusion_mask(warped_crop)
+def occlusion_center_visibility(occlusion_mask : numpy.ndarray) -> float:
 	height, width = occlusion_mask.shape[:2]
 	center_mask = occlusion_mask[height // 4:3 * height // 4, width // 4:3 * width // 4]
 	return float(center_mask.mean())
@@ -92,8 +100,7 @@ def validate_source_face(
 	vision_frame : VisionFrame,
 	face : Face,
 	swap_template : str,
-	swap_crop_size : Tuple[int, int],
-	probe_swap_crop : ProbeSwapCrop
+	swap_crop_size : Tuple[int, int]
 ) -> Tuple[bool, dict]:
 	reasons : List[str] = []
 	metrics = {
@@ -144,8 +151,8 @@ def validate_source_face(
 		reasons.append('aligned_crop_low_sharpness')
 
 	warped_crop, _ = warp_face_by_face_landmark_5(vision_frame, face.landmark_set.get('5/68'), swap_template, swap_crop_size)
-
-	occlusion_center_mean = occlusion_center_visibility(warped_crop)
+	occlusion_mask = create_occlusion_mask(warped_crop)
+	occlusion_center_mean = occlusion_center_visibility(occlusion_mask)
 	metrics['occlusion_center_mean'] = round(occlusion_center_mean, 4)
 	if occlusion_center_mean < MIN_OCCLUSION_CENTER_MEAN:
 		reasons.append('high_source_occlusion')
@@ -155,34 +162,19 @@ def validate_source_face(
 	if not regions_present:
 		reasons.append('features_not_visible')
 
-	probe_crop = probe_swap_crop(face, vision_frame)
-	if probe_crop is None:
-		reasons.append('self_swap_probe_failed')
-	else:
-		is_degenerate, probe_metrics = is_degenerate_swap_crop(probe_crop)
-		metrics['self_swap_probe'] = probe_metrics
-		if is_degenerate:
-			reasons.append('self_swap_probe_degenerate')
-
 	metrics['reasons'] = reasons
 	return len(reasons) == 0, metrics
 
 
 def validate_source_faces(
-	source_vision_frames : List[VisionFrame],
+	source_samples : List[Tuple[VisionFrame, Face]],
 	swap_template : str,
-	swap_crop_size : Tuple[int, int],
-	probe_swap_crop : ProbeSwapCrop
+	swap_crop_size : Tuple[int, int]
 ) -> Tuple[bool, dict]:
 	results = []
 
-	for vision_frame in source_vision_frames:
-		if vision_frame is None or not numpy.any(vision_frame):
-			continue
-		faces = sort_faces_by_order(get_many_faces([ vision_frame ]), 'large-small')
-		if not faces:
-			continue
-		passed, metrics = validate_source_face(vision_frame, faces[0], swap_template, swap_crop_size, probe_swap_crop)
+	for vision_frame, face in source_samples:
+		passed, metrics = validate_source_face(vision_frame, face, swap_template, swap_crop_size)
 		results.append(
 		{
 			'passed': passed,

@@ -22,7 +22,7 @@ from facefusion.processors.modules.face_swapper import choices as face_swapper_c
 from facefusion.processors.modules.face_swapper.types import FaceSwapperInputs
 from facefusion.processors.pixel_boost import explode_pixel_boost, implode_pixel_boost
 from facefusion.processors.types import ProcessorOutputs
-from facefusion.source_validator import format_validation_debug, format_validation_error, is_source_validation_enabled, validate_source_faces
+from facefusion.source_validator import format_validation_debug, format_validation_error, is_source_validation_enabled, select_source_samples, validate_source_faces
 from facefusion.swap_quality import is_degenerate_swap_crop
 from facefusion.program_helper import find_argument_group
 from facefusion.thread_helper import conditional_thread_semaphore
@@ -560,14 +560,10 @@ def pre_process(mode : ProcessMode) -> bool:
 		return False
 
 	if is_source_validation_enabled():
+		source_samples = select_source_samples(source_vision_frames)
 		model_template = get_model_options().get('template')
 		swap_crop_size = unpack_resolution(state_manager.get_item('face_swapper_pixel_boost'))
-		passed, report = validate_source_faces(
-			source_vision_frames,
-			model_template,
-			swap_crop_size,
-			probe_swap_crop
-		)
+		passed, report = validate_source_faces(source_samples, model_template, swap_crop_size)
 		if not passed:
 			logger.debug(format_validation_debug(report), __name__)
 			logger.error(format_validation_error(report) + translator.get('exclamation_mark'), __name__)
@@ -643,13 +639,6 @@ def prepare_swap_paste(source_face : Face, target_face : Face, temp_vision_frame
 
 	crop_mask = numpy.minimum.reduce(crop_masks).clip(0, 1)
 	return crop_vision_frame, affine_matrix, crop_mask
-
-
-def probe_swap_crop(source_face : Face, vision_frame : VisionFrame) -> Optional[VisionFrame]:
-	swap_paste = prepare_swap_paste(source_face, source_face, vision_frame)
-	if swap_paste:
-		return swap_paste[0]
-	return None
 
 
 def swap_face(source_face : Face, target_face : Face, temp_vision_frame : VisionFrame) -> VisionFrame:
