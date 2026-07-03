@@ -22,6 +22,7 @@ for arg in "$@"; do
 done
 
 if [ -x "$NVSCOPE_BIN" ] && [ -f "$NVSCOPE_LIB" ]; then
+	export NVSCOPE_LIB
 	exec "$NVSCOPE_BIN" -- "$REAL_FFMPEG" "$@"
 fi
 

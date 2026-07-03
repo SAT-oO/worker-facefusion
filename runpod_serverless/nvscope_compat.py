@@ -16,6 +16,16 @@ _NVSCOPE_PROBE = "/usr/local/bin/nvscope-probe"
 _NVSCOPE_LIB = "/usr/local/lib/nvscope/libnvscope.so"
 
 
+def nvscope_ffmpeg_env() -> dict[str, str]:
+    """Environment for ffmpeg invocations that should use the nvscope wrapper."""
+    env = os.environ.copy()
+    env["NVSCOPE_LIB"] = _NVSCOPE_LIB
+    gpu_uuid = resolve_nvscope_gpu_uuid()
+    if gpu_uuid:
+        env["NVSCOPE_GPU_UUID"] = gpu_uuid
+    return env
+
+
 def _ffmpeg_real_path() -> str:
     explicit = os.environ.get("FFMPEG_REAL_PATH")
     if explicit:
@@ -36,11 +46,8 @@ def facefusion_subprocess_env() -> dict[str, str]:
     Encoder discovery uses FFMPEG_ENCODER_PROBE (bare ffmpeg). Actual video
     encode/decode still goes through the PATH nvscope wrapper.
     """
-    env = os.environ.copy()
+    env = nvscope_ffmpeg_env()
     env["FFMPEG_ENCODER_PROBE"] = _ffmpeg_real_path()
-    gpu_uuid = resolve_nvscope_gpu_uuid()
-    if gpu_uuid:
-        env["NVSCOPE_GPU_UUID"] = gpu_uuid
     return env
 
 
@@ -165,6 +172,7 @@ def run_nvscope_probe(timeout: int = 30) -> tuple[bool, str]:
             capture_output=True,
             text=True,
             timeout=timeout,
+            env=nvscope_ffmpeg_env(),
         )
     except Exception as exc:
         return False, str(exc)

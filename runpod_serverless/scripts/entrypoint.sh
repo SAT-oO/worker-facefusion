@@ -3,6 +3,8 @@
 # nvscope wrapper; no /dev/nvidia0 symlink remapping is required.
 set -eu
 
+export NVSCOPE_LIB="${NVSCOPE_LIB:-/usr/local/lib/nvscope/libnvscope.so}"
+
 if [ "${NVSCOPE_DISABLED:-0}" != "1" ] && command -v nvidia-smi >/dev/null 2>&1; then
 	if [ -z "${NVSCOPE_GPU_UUID:-}" ]; then
 		gpu_uuid="$(nvidia-smi --query-gpu=uuid --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')"

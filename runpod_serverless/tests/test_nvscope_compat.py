@@ -119,6 +119,13 @@ class NvscopeCompatTest(unittest.TestCase):
                 env = nvscope_compat.facefusion_subprocess_env()
         self.assertEqual(env["FFMPEG_ENCODER_PROBE"], "/usr/bin/ffmpeg")
         self.assertEqual(env["NVSCOPE_GPU_UUID"], "GPU-abc")
+        self.assertEqual(env["NVSCOPE_LIB"], nvscope_compat._NVSCOPE_LIB)
+
+    def test_nvscope_ffmpeg_env_sets_lib_and_gpu_uuid(self):
+        with patch.object(nvscope_compat, "resolve_nvscope_gpu_uuid", return_value="GPU-xyz"):
+            env = nvscope_compat.nvscope_ffmpeg_env()
+        self.assertEqual(env["NVSCOPE_LIB"], nvscope_compat._NVSCOPE_LIB)
+        self.assertEqual(env["NVSCOPE_GPU_UUID"], "GPU-xyz")
 
     def test_warmup_nvscope_not_installed(self):
         with patch.object(nvscope_compat, "is_nvscope_installed", return_value=False):

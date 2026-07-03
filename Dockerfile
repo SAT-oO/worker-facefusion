@@ -24,6 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     NVIDIA_DRIVER_CAPABILITIES=all \
     NVIDIA_VISIBLE_DEVICES=all \
+    NVSCOPE_LIB=/usr/local/lib/nvscope/libnvscope.so \
     LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}
 
 
@@ -123,12 +124,21 @@ COPY --from=models /app/.assets /app/.assets
 COPY --from=nvscope-build /src/nvscope/libnvscope.so /usr/local/lib/nvscope/libnvscope.so
 COPY --from=nvscope-build /src/nvscope/tools/nvscope /usr/local/bin/nvscope
 COPY --from=nvscope-build /src/nvscope/tools/nvscope-probe /usr/local/bin/nvscope-probe
+COPY --from=nvscope-build /src/nvscope/tools/run-nvenc-test.sh /usr/local/bin/run-nvenc-test.sh
+COPY --from=nvscope-build /src/nvscope/tools/run-nvdec-test.sh /usr/local/bin/run-nvdec-test.sh
 COPY runpod_serverless/scripts/ffmpeg-nvscope /usr/local/bin/ffmpeg
 COPY runpod_serverless/scripts/entrypoint.sh /usr/local/bin/worker-entrypoint.sh
 RUN chmod +x /usr/local/bin/nvscope /usr/local/bin/nvscope-probe \
+        /usr/local/bin/run-nvenc-test.sh /usr/local/bin/run-nvdec-test.sh \
         /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
-    && sed -i 's/\r$//' /usr/local/bin/nvscope-probe /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
-    && sh -n /usr/local/bin/nvscope-probe /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
+    && sed -i 's/\r$//' /usr/local/bin/nvscope /usr/local/bin/nvscope-probe /usr/local/bin/run-nvenc-test.sh \
+        /usr/local/bin/run-nvdec-test.sh /usr/local/bin/ffmpeg /usr/local/bin/worker-entrypoint.sh \
+    && sh -n /usr/local/bin/nvscope \
+    && sh -n /usr/local/bin/nvscope-probe \
+    && sh -n /usr/local/bin/run-nvenc-test.sh \
+    && sh -n /usr/local/bin/run-nvdec-test.sh \
+    && sh -n /usr/local/bin/ffmpeg \
+    && sh -n /usr/local/bin/worker-entrypoint.sh \
     && test -x /usr/local/bin/nvscope \
     && test -f /usr/local/lib/nvscope/libnvscope.so
 

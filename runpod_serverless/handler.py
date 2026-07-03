@@ -20,6 +20,7 @@ from nvscope_compat import (
     describe_nvscope_status,
     facefusion_subprocess_env,
     ffmpeg_real_path,
+    nvscope_ffmpeg_env,
     probe_facefusion_video_encoders,
     resolve_ffmpeg_executable,
     warmup_nvscope,
@@ -192,6 +193,7 @@ def _probe_nvenc() -> bool:
             capture_output=True,
             text=True,
             timeout=30,
+            env=nvscope_ffmpeg_env(),
         )
         if proc.returncode == 0:
             logger.info("nvenc probe: OK")
