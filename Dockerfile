@@ -11,6 +11,7 @@ WORKDIR /src/nvscope
 RUN git clone --depth 1 --branch "${NVSCOPE_REF}" https://github.com/MadiatorLabs/nvscope.git . \
     || git clone --depth 1 https://github.com/MadiatorLabs/nvscope.git .
 RUN make \
+    && chmod +x tools/nvscope tools/nvscope-probe \
     && test -x tools/nvscope \
     && test -x tools/nvscope-probe \
     && test -f libnvscope.so
