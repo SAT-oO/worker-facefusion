@@ -89,21 +89,37 @@ class EncoderFallbackTest(unittest.TestCase):
         self.assertTrue(handler.NVENC_AVAILABLE)
         job_logger.warning.assert_not_called()
 
-        # Every NVENC job re-probes; a later failure applies fallback.
+        # After a successful per-job reprobe, later jobs use the cached result until invalidated.
         with patch.object(handler, "_probe_nvenc", return_value=False) as reprobe2:
+            handler.invalidate_nvenc_probe()
             patched = handler._apply_nvenc_fallback(args, job_logger)
         reprobe2.assert_called_once()
         self.assertEqual(patched, ["--output-video-encoder", "libx264"])
 
-    def test_probe_success_passes_nvenc_through(self):
+    def test_probe_success_skips_reprobe_when_nvenc_cached(self):
         handler = _import_handler(probe_returncode=0)
         self.assertTrue(handler.NVENC_AVAILABLE)
 
         job_logger = MagicMock()
         args = ["--output-video-encoder", "h264_nvenc"]
-        with patch.object(handler, "_probe_nvenc", return_value=True):
+        with patch.object(handler, "_probe_nvenc", return_value=True) as reprobe:
             self.assertEqual(handler._apply_nvenc_fallback(args, job_logger), args)
+        reprobe.assert_not_called()
         job_logger.warning.assert_not_called()
+
+    def test_cached_nvenc_fallbacks_after_invalidation(self):
+        handler = _import_handler(probe_returncode=0)
+        self.assertTrue(handler.NVENC_AVAILABLE)
+
+        job_logger = MagicMock()
+        args = ["--output-video-encoder", "h264_nvenc"]
+        handler.invalidate_nvenc_probe()
+        self.assertFalse(handler.NVENC_AVAILABLE)
+
+        with patch.object(handler, "_probe_nvenc", return_value=False) as reprobe:
+            patched = handler._apply_nvenc_fallback(args, job_logger)
+        reprobe.assert_called_once()
+        self.assertEqual(patched, ["--output-video-encoder", "libx264"])
 
     def test_probe_failure_drops_encoder_when_cpu_fallback_unavailable(self):
         handler = _import_handler(probe_returncode=1)

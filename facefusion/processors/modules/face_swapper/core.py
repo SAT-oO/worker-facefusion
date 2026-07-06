@@ -618,11 +618,15 @@ def prepare_swap_paste(source_face : Face, target_face : Face, temp_vision_frame
 		crop_masks.append(occlusion_mask)
 
 	pixel_boost_vision_frames = implode_pixel_boost(crop_vision_frame, pixel_boost_total, model_size)
-	for pixel_boost_vision_frame in pixel_boost_vision_frames:
-		pixel_boost_vision_frame = prepare_crop_frame(pixel_boost_vision_frame)
-		pixel_boost_vision_frame = forward_swap_face(source_face, target_face, pixel_boost_vision_frame)
-		pixel_boost_vision_frame = normalize_crop_frame(pixel_boost_vision_frame)
-		temp_vision_frames.append(pixel_boost_vision_frame)
+	model_type = get_model_options().get('type')
+	if model_type in [ 'blendswap', 'uniface' ]:
+		for pixel_boost_vision_frame in pixel_boost_vision_frames:
+			pixel_boost_vision_frame = prepare_crop_frame(pixel_boost_vision_frame)
+			pixel_boost_vision_frame = forward_swap_face(source_face, target_face, pixel_boost_vision_frame)
+			pixel_boost_vision_frame = normalize_crop_frame(pixel_boost_vision_frame)
+			temp_vision_frames.append(pixel_boost_vision_frame)
+	else:
+		temp_vision_frames = forward_swap_faces_batch(source_face, target_face, pixel_boost_vision_frames)
 	crop_vision_frame = explode_pixel_boost(temp_vision_frames, pixel_boost_total, model_size, pixel_boost_size)
 
 	if 'area' in state_manager.get_item('face_mask_types'):
@@ -662,9 +666,15 @@ def swap_face(source_face : Face, target_face : Face, temp_vision_frame : Vision
 
 
 def forward_swap_face(source_face : Face, target_face : Face, crop_vision_frame : VisionFrame) -> VisionFrame:
+	return forward_swap_faces_batch(source_face, target_face, [ crop_vision_frame ])[0]
+
+
+def forward_swap_faces_batch(source_face : Face, target_face : Face, crop_vision_frames : List[VisionFrame]) -> List[VisionFrame]:
 	face_swapper = get_inference_pool().get('face_swapper')
 	model_type = get_model_options().get('type')
 	face_swapper_inputs = {}
+	batch_size = len(crop_vision_frames)
+	prepared_crop_frames = [ prepare_crop_frame(crop_vision_frame) for crop_vision_frame in crop_vision_frames ]
 
 	if is_macos() and has_execution_provider('coreml') and model_type in [ 'ghost', 'uniface' ]:
 		face_swapper.set_providers([ facefusion.choices.execution_provider_set.get('cpu') ])
@@ -676,14 +686,19 @@ def forward_swap_face(source_face : Face, target_face : Face, crop_vision_frame 
 			else:
 				source_embedding = prepare_source_embedding(source_face)
 				source_embedding = balance_source_embedding(source_embedding, target_face.embedding)
+				if batch_size > 1:
+					source_embedding = numpy.repeat(source_embedding, batch_size, axis = 0)
 				face_swapper_inputs[face_swapper_input.name] = source_embedding
 		if face_swapper_input.name == 'target':
-			face_swapper_inputs[face_swapper_input.name] = crop_vision_frame
+			if batch_size == 1:
+				face_swapper_inputs[face_swapper_input.name] = prepared_crop_frames[0]
+			else:
+				face_swapper_inputs[face_swapper_input.name] = numpy.concatenate(prepared_crop_frames, axis = 0)
 
 	with conditional_thread_semaphore():
-		crop_vision_frame = face_swapper.run(None, face_swapper_inputs)[0][0]
+		swap_vision_frames = face_swapper.run(None, face_swapper_inputs)[0]
 
-	return crop_vision_frame
+	return [ normalize_crop_frame(swap_vision_frames[index]) for index in range(batch_size) ]
 
 
 def forward_convert_embedding(face_embedding : Embedding) -> Embedding:

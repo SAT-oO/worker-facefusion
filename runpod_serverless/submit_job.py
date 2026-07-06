@@ -52,7 +52,7 @@ def default_body() -> dict[str, Any]:
                 "--output-video-encoder", "h264_nvenc",
                 "--output-video-preset", "fast",
                 "--output-video-quality", "85",
-                "--temp-frame-format", "png",
+                "--temp-frame-format", "bmp",
                 "--face-mask-types", "box", "occlusion", "region", 
                 "--face-selector-mode", "one",
                 "--face-selector-order", "large-small",

@@ -29,7 +29,7 @@
         "--output-video-encoder", "h264_nvenc",
         "--output-video-preset", "fast",
         "--output-video-quality", "85",
-        "--temp-frame-format", "png",
+        "--temp-frame-format", "bmp",
         "--face-mask-types", "box", "occlusion", "region", 
         "--face-selector-mode", "one",
         "--face-selector-order", "large-small"
@@ -52,7 +52,7 @@
         "--output-video-encoder", "h264_nvenc",
         "--output-video-preset", "fast",
         "--output-video-quality", "80",
-        "--temp-frame-format", "png",
+        "--temp-frame-format", "bmp",
         "--face-mask-types", "box", "occlusion"
       ]
     },
@@ -72,7 +72,7 @@
         "--output-video-encoder", "h264_nvenc",
         "--output-video-preset", "fast",
         "--output-video-quality", "85",
-        "--temp-frame-format", "png",
+        "--temp-frame-format", "bmp",
         "--face-mask-types", "box", "occlusion"
       ]
     },
@@ -93,7 +93,7 @@
         "--output-video-encoder", "libx264",
         "--output-video-preset", "veryslow",
         "--output-video-quality", "95",
-        "--temp-frame-format", "png",
+        "--temp-frame-format", "bmp",
         "--face-mask-types", "box", "occlusion"
       ]
     },
@@ -113,14 +113,14 @@
         "--output-video-encoder", "libx264",
         "--output-video-preset", "veryslow",
         "--output-video-quality", "95",
-        "--temp-frame-format", "png",
+        "--temp-frame-format", "bmp",
         "--face-mask-types", "box", "occlusion"
       ]
     }
   ],
   "notes": [
     "Tier 1 (production) is the minimum preset: source-matched resolution/fps (output-video-scale 1.0, no output-video-fps cap).",
-    "All tiers use temp-frame-format png to avoid lossy intermediate frames.",
+    "Intermediate frames use lossless bmp (faster I/O than png; final encode quality unchanged).",
     "Tiers are ordered by expected compute time on a fixed clip; actual ranking depends on GPU, clip length, and resolution.",
     "All tiers use execution-thread-count 8.",
     "Change one tier at a time when benchmarking; tiers 3–5 may exceed the 360s RunPod execution timeout on long clips.",

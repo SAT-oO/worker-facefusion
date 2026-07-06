@@ -210,17 +210,25 @@ _NVENC_ENCODER_FALLBACKS = {
 }
 
 
+def invalidate_nvenc_probe() -> None:
+    """Clear cached NVENC availability (e.g. after an encode failure)."""
+    global NVENC_AVAILABLE
+    NVENC_AVAILABLE = False
+
+
 def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
     """Replace NVENC encoders with CPU equivalents when NVENC is unavailable.
 
-    NVENC is re-probed for every job that requests it. A prior successful probe
-    does not guarantee the next encode can allocate NVENC buffers (e.g. when ONNX
-    still holds VRAM or nvscope has not yet mapped the assigned GPU UUID).
+    Uses the startup probe result when NVENC is known-good. Re-probes only when
+  the prior probe failed or was invalidated (e.g. ONNX still holds VRAM).
     """
     global NVENC_AVAILABLE
 
     args = [str(a) for a in extra_args]
     if not any(arg in _NVENC_ENCODER_FALLBACKS for arg in args):
+        return extra_args
+
+    if NVENC_AVAILABLE:
         return extra_args
 
     _log_debug_event(
@@ -673,40 +681,64 @@ def handler(event):
             cmd += [str(a) for a in extra_args]
 
         _log_job_state(job_logger, "PROCESSING")
+        use_subprocess = os.environ.get("FF_SUBPROCESS", "").strip() == "1"
         _log_debug_event(
             job_logger,
             TRACE_LEVEL,
             "handler.py:headless-run",
-            "starting facefusion subprocess",
-            {"cmd": cmd},
+            "starting facefusion in-process" if not use_subprocess else "starting facefusion subprocess",
+            {"cmd": cmd, "in_process": not use_subprocess},
         )
         phase_started = time()
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=_REPO_ROOT,
-            env=facefusion_subprocess_env(),
-        )
+        if use_subprocess:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=_REPO_ROOT,
+                env=facefusion_subprocess_env(),
+            )
+            returncode = proc.returncode
+            stdout_text = proc.stdout or ""
+            stderr_text = proc.stderr or ""
+        else:
+            from facefusion_runner import run_headless
+
+            ff_env = facefusion_subprocess_env()
+            for key, value in ff_env.items():
+                os.environ[key] = value
+            ff_result = run_headless(
+                source_path,
+                target_path,
+                output_path,
+                processors,
+                face_swapper_model,
+                extra_args,
+            )
+            returncode = ff_result.returncode
+            stdout_text = ff_result.stdout
+            stderr_text = ff_result.stderr
         timings["facefusion_ms"] = _elapsed_ms(phase_started)
         _log_debug_event(
             job_logger,
             TRACE_LEVEL,
             "handler.py:headless-run",
-            "facefusion subprocess finished",
+            "facefusion finished",
             {
                 "facefusion_ms": timings["facefusion_ms"],
-                "returncode": proc.returncode,
-                "stderr_tail": _tail(proc.stderr, 1200),
-                "stdout_tail": _tail(proc.stdout, 1200),
+                "returncode": returncode,
+                "in_process": not use_subprocess,
+                "stderr_tail": _tail(stderr_text, 1200),
+                "stdout_tail": _tail(stdout_text, 1200),
             },
         )
 
-        if proc.returncode != 0 or not os.path.exists(output_path):
+        if returncode != 0 or not os.path.exists(output_path):
             yolo_diagnostics = None
             source_diagnostics = None
             source_quality = None
-            stderr_text = proc.stderr or ""
+            if "nvenc" in stderr_text.lower() or "h264_nvenc" in stderr_text.lower():
+                invalidate_nvenc_probe()
             if "loading model yoloface_8n failed" in stderr_text:
                 yolo_diagnostics = _diagnose_yolo_model_load()
                 _log_debug_event(
@@ -747,12 +779,12 @@ def handler(event):
             error_message = (
                 "source_face_quality_insufficient"
                 if source_quality
-                else f"headless-run failed (exit {proc.returncode})"
+                else f"headless-run failed (exit {returncode})"
             )
             result = {
                 "error": error_message,
-                "stderr": _tail(proc.stderr),
-                "stdout": _tail(proc.stdout),
+                "stderr": _tail(stderr_text),
+                "stdout": _tail(stdout_text),
                 "diagnostics": diagnostics,
                 "timings": timings,
             }
@@ -763,8 +795,8 @@ def handler(event):
                 payload,
                 error=result["error"],
                 extra={
-                    "returncode": proc.returncode,
-                    "stderr_tail": _tail(proc.stderr, 1200),
+                    "returncode": returncode,
+                    "stderr_tail": _tail(stderr_text, 1200),
                     "diagnostics": diagnostics,
                 },
             )
