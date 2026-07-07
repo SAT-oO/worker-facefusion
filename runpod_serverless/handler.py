@@ -28,6 +28,8 @@ from nvscope_compat import (
 
 _RUNPOD_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_RUNPOD_DIR)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 _LOGGER_NAME = "runpod_worker"
 TRACE_LEVEL = 5
 
@@ -296,11 +298,55 @@ def _apply_nvenc_fallback(extra_args: list, job_logger) -> list:
     return patched
 
 
-logger.info("Logger initialized. Ready to process jobs.")
-AVAILABLE_VIDEO_ENCODERS = probe_facefusion_video_encoders()
-warmup_nvscope()
-_startup_self_check()
-NVENC_AVAILABLE = _probe_nvenc()
+AVAILABLE_VIDEO_ENCODERS: list[str] = []
+NVENC_AVAILABLE = False
+_WORKER_INITIALIZED = False
+
+
+def _env_flag(name: str, *, default: bool = False) -> bool:
+    value = os.environ.get(name, "1" if default else "0").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _initialize_worker() -> None:
+    """Run optional GPU/NVENC startup probes. Must never prevent worker boot."""
+    global AVAILABLE_VIDEO_ENCODERS, NVENC_AVAILABLE, _WORKER_INITIALIZED
+    if _WORKER_INITIALIZED:
+        return
+    _WORKER_INITIALIZED = True
+
+    logger.info("Logger initialized. Ready to process jobs.")
+    if _env_flag("SKIP_BOOT_GPU_CHECKS"):
+        logger.warning("SKIP_BOOT_GPU_CHECKS=1: skipping nvscope/nvenc startup probes")
+        return
+
+    try:
+        AVAILABLE_VIDEO_ENCODERS = probe_facefusion_video_encoders()
+    except Exception as exc:
+        logger.error("ffmpeg encoder probe failed (worker will still start): %s", exc, exc_info=True)
+        AVAILABLE_VIDEO_ENCODERS = []
+
+    try:
+        warmup_nvscope()
+    except Exception as exc:
+        logger.error("nvscope warmup failed (worker will still start): %s", exc, exc_info=True)
+
+    try:
+        _startup_self_check()
+    except Exception as exc:
+        logger.error("startup self-check failed (worker will still start): %s", exc, exc_info=True)
+
+    if _env_flag("NVENC_PROBE_AT_STARTUP", default=True):
+        try:
+            NVENC_AVAILABLE = _probe_nvenc()
+        except Exception as exc:
+            logger.error("nvenc startup probe failed (worker will still start): %s", exc, exc_info=True)
+            NVENC_AVAILABLE = False
+    else:
+        logger.info("NVENC_PROBE_AT_STARTUP=0: deferring nvenc probe until first job")
+
+
+_initialize_worker()
 
 
 R2_ACCOUNT_ID = os.environ.get("R2_ACCOUNT_ID", "")
@@ -853,4 +899,5 @@ def handler(event):
 
 
 if __name__ == "__main__":
+    _initialize_worker()
     runpod.serverless.start({"handler": handler})

@@ -6,6 +6,7 @@ Set FF_SUBPROCESS=1 to fall back to the legacy subprocess path.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 import os
@@ -102,6 +103,23 @@ def _build_argv(
     return argv
 
 
+def _parse_program_args(program, argv: list[str]) -> dict:
+    """Parse FaceFusion CLI argv without letting argparse SystemExit escape.
+
+    argparse.parse_args() expects args *without* the program name (sys.argv[1:]).
+    _build_argv includes a leading prog token for logging/subprocess parity only.
+    """
+    parse_argv = argv[1:] if argv and argv[0].endswith(("facefusion.py", "handler.py")) else argv
+    stderr_capture = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(stderr_capture):
+            return vars(program.parse_args(parse_argv))
+    except SystemExit as exc:
+        detail = stderr_capture.getvalue().strip()
+        message = detail or f"argument parse failed (exit {exc.code})"
+        raise ValueError(message) from exc
+
+
 def run_headless(
     source_path: str,
     target_path: str,
@@ -134,7 +152,7 @@ def run_headless(
     capture.install()
     try:
         program = create_program()
-        args = vars(program.parse_args(argv))
+        args = _parse_program_args(program, argv)
         apply_args(args, state_manager.set_item)
         error_code = process_headless(args)
         log_text = capture.text
